@@ -83,6 +83,12 @@ if TYPE_CHECKING:
 
     from .builder import Key as BuilderKey
 
+_SINGLE_TRUE: pa.Array = pa.array([True], type=pa.bool_())
+
+_SINGLE_FALSE: pa.Array = pa.array([False], type=pa.bool_())
+
+_SINGLE_NULL: pa.Array = pa.array([None], type=pa.bool_())
+
 logger = get_logger(__name__)
 
 Key = Union[int, str, tuple[int, int], "BuilderKey"]
@@ -1569,7 +1575,19 @@ def _add_mask(
 ):
     if isinstance(input, pa.Table):
         if not isinstance(mask, (list, pa.Array, pa.ChunkedArray)):
-            mask = pa.array([mask], type=pa.bool_())
+            if isinstance(mask, pa.BooleanScalar):
+                mask_value = mask.as_py()
+            else:
+                mask_value = mask
+            
+            if mask_value is None:
+                mask = _SINGLE_NULL
+            elif mask_value is True:
+                mask = _SINGLE_TRUE
+            elif mask_value is False:
+                mask = _SINGLE_FALSE
+            else:
+                mask = pa.array([mask], type=pa.bool_())
         return input.append_column(mask_column_name, mask)
     else:
         return {mask_column_name: mask}
