@@ -24,6 +24,8 @@ from datasets.table import cast_table_to_features
 if TYPE_CHECKING:
     import h5py
 
+_ARRAYXD_BY_RANK = {2: Array2D, 3: Array3D, 4: Array4D, 5: Array5D}
+
 logger = datasets.utils.logging.get_logger(__name__)
 
 EXTENSIONS = [".h5", ".hdf5"]
@@ -326,7 +328,7 @@ def _create_sized_feature_impl(dset_shape, value_feature):
 
 
 def _sized_arrayxd(rank: int):
-    return {2: Array2D, 3: Array3D, 4: Array4D, 5: Array5D}[rank]
+    return _ARRAYXD_BY_RANK[rank]
 
 
 def _np_to_pa_to_hf_value(numpy_dtype: np.dtype) -> Value:
