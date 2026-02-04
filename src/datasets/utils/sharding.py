@@ -53,24 +53,30 @@ def _split_gen_kwargs(gen_kwargs: dict, max_num_jobs: int) -> list[dict]:
         return [dict(gen_kwargs)]
     else:
         shard_indices_per_group = _distribute_shards(num_shards=num_shards, max_num_jobs=max_num_jobs)
-        return [
-            {
-                key: [value[shard_idx] for shard_idx in shard_indices_per_group[group_idx]]
-                if isinstance(value, list)
-                else value
-                for key, value in gen_kwargs.items()
-            }
-            for group_idx in range(len(shard_indices_per_group))
-        ]
+        num_groups = len(shard_indices_per_group)
+        result = [{} for _ in range(num_groups)]
+        for key, value in gen_kwargs.items():
+            if isinstance(value, list):
+                for group_idx, shard_range in enumerate(shard_indices_per_group):
+                    result[group_idx][key] = value[shard_range.start:shard_range.stop]
+            else:
+                for group_idx in range(num_groups):
+                    result[group_idx][key] = value
+        return result
 
 
 def _merge_gen_kwargs(gen_kwargs_list: list[dict]) -> dict:
-    return {
-        key: [value for gen_kwargs in gen_kwargs_list for value in gen_kwargs[key]]
-        if isinstance(gen_kwargs_list[0][key], list)
-        else gen_kwargs_list[0][key]
-        for key in gen_kwargs_list[0]
-    }
+    result = {}
+    first = gen_kwargs_list[0]
+    for key in first:
+        if isinstance(first[key], list):
+            merged = []
+            for gen_kwargs in gen_kwargs_list:
+                merged.extend(gen_kwargs[key])
+            result[key] = merged
+        else:
+            result[key] = first[key]
+    return result
 
 
 def _shuffle_gen_kwargs(rng: np.random.Generator, gen_kwargs: dict) -> dict:
