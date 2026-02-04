@@ -1062,7 +1062,12 @@ class RandomlyCyclingMultiSourcesExamplesIterable(CyclingMultiSourcesExamplesIte
         ] = "first_exhausted",
     ):
         super().__init__(ex_iterables, stopping_strategy)
-        self.generator = deepcopy(generator)
+        try:
+            state = generator.bit_generator.state
+            self.generator = np.random.default_rng()
+            self.generator.bit_generator.state = deepcopy(state)
+        except (AttributeError, KeyError):
+            self.generator = deepcopy(generator)
         self.probabilities = probabilities
 
     def shift_rngs(self, value: int) -> "_BaseExamplesIterable":
