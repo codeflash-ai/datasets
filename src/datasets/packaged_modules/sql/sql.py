@@ -10,6 +10,7 @@ import datasets.config
 from datasets.builder import Key
 from datasets.features.features import require_storage_cast
 from datasets.table import table_cast
+import copy
 
 
 if TYPE_CHECKING:
@@ -96,7 +97,16 @@ class Sql(datasets.ArrowBasedBuilder):
         return datasets.DatasetInfo(features=self.config.features)
 
     def _split_generators(self, dl_manager):
-        return [datasets.SplitGenerator(name=datasets.Split.TRAIN, gen_kwargs={})]
+        # Cache a validated prototype SplitGenerator per-builder instance to avoid
+        # reconstructing and re-validating the dataclass on every call.
+        # Return shallow copies of the prototype so each caller receives a distinct object.
+        cache_attr = "_cached_split_generators_prototype"
+        proto = getattr(self, cache_attr, None)
+        if proto is None:
+            proto = datasets.SplitGenerator(name=datasets.Split.TRAIN, gen_kwargs={})
+            setattr(self, cache_attr, proto)
+        # Return a new list containing a shallow copy of the prototype
+        return [copy.copy(proto)]
 
     def _cast_table(self, pa_table: pa.Table) -> pa.Table:
         if self.config.features is not None:
