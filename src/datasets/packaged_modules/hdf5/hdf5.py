@@ -367,9 +367,11 @@ def _is_group(h5_obj) -> bool:
 
 
 def _is_dataset(h5_obj) -> bool:
-    import h5py
+    if not hasattr(_is_dataset, "_h5py_dataset_cls"):
+        import h5py
 
-    return isinstance(h5_obj, h5py.Dataset) or isinstance(h5_obj, _CompoundField)
+        _is_dataset._h5py_dataset_cls = h5py.Dataset
+    return isinstance(h5_obj, (_is_dataset._h5py_dataset_cls, _CompoundField))
 
 
 def _is_file(h5_obj) -> bool:
