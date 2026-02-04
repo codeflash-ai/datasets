@@ -1,3 +1,4 @@
+from __future__ import annotations
 import asyncio
 import contextlib
 import copy
@@ -1929,10 +1930,10 @@ class TakeExamplesIterable(_BaseExamplesIterable):
     def split_number(num, n):
         quotient = num // n
         remainder = num % n
-        result = [quotient] * n
-        for i in range(remainder):
-            result[i] += 1
-        return result
+        if remainder == 0:
+            return [quotient] * n
+        # Put (quotient + 1) for the first `remainder` shards, then `quotient` for the rest.
+        return [quotient + 1] * remainder + [quotient] * (n - remainder)
 
     def shuffle_data_sources(self, generator: np.random.Generator) -> "TakeExamplesIterable":
         """May not shuffle the wrapped examples iterable since it would take examples from other shards instead."""
