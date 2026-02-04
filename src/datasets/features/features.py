@@ -23,8 +23,7 @@ from collections.abc import Iterable, Mapping
 from collections.abc import Sequence as SequenceABC
 from collections.abc import Sequence as Sequence_
 from dataclasses import InitVar, dataclass, field, fields
-from functools import reduce, wraps
-from operator import mul
+from functools import wraps
 from typing import Any, Callable, ClassVar, Literal, Optional, Union
 
 import numpy as np
@@ -46,6 +45,7 @@ from .nifti import Nifti, encode_nibabel_image
 from .pdf import Pdf, encode_pdfplumber_pdf
 from .translation import Translation, TranslationVariableLanguages
 from .video import Video
+import math
 
 
 logger = logging.get_logger(__name__)
@@ -1522,13 +1522,20 @@ def generate_from_arrow_type(pa_type: pa.DataType) -> FeatureType:
 
 def numpy_to_pyarrow_listarray(arr: np.ndarray, type: pa.DataType = None) -> pa.ListArray:
     """Build a PyArrow ListArray from a multidimensional NumPy array"""
-    arr = np.array(arr)
-    values = pa.array(arr.flatten(), type=type)
+    # Avoid unnecessary copies when arr is already an ndarray
+    arr = np.asarray(arr)
+    # Use ravel to avoid creating another copy when possible
+    flat = arr.ravel()
+    values = pa.array(flat, type=type)
+    # Build nested ListArray wrappers from inner-most dimension outwards
     for i in range(arr.ndim - 1):
-        n_offsets = reduce(mul, arr.shape[: arr.ndim - i - 1], 1)
+        # n_offsets is the number of lists at this nesting level
+        n_offsets = math.prod(arr.shape[: arr.ndim - i - 1]) if arr.ndim - i - 1 > 0 else 1
         step_offsets = arr.shape[arr.ndim - i - 1]
-        offsets = pa.array(np.arange(n_offsets + 1) * step_offsets, type=pa.int32())
-        values = pa.ListArray.from_arrays(offsets, values)
+        # Use numpy with explicit dtype to produce offsets quickly
+        offsets = np.arange(n_offsets + 1, dtype=np.int32) * step_offsets
+        offsets_pa = pa.array(offsets, type=pa.int32())
+        values = pa.ListArray.from_arrays(offsets_pa, values)
     return values
 
 

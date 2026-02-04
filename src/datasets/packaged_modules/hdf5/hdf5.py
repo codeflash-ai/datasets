@@ -133,11 +133,9 @@ def _create_complex_features(dset) -> Features:
 
 
 def _convert_complex_to_nested(arr: np.ndarray) -> pa.StructArray:
-    data = {
-        "real": datasets.features.features.numpy_to_pyarrow_listarray(arr.real),
-        "imag": datasets.features.features.numpy_to_pyarrow_listarray(arr.imag),
-    }
-    return pa.StructArray.from_arrays([data["real"], data["imag"]], names=["real", "imag"])
+    real = datasets.features.features.numpy_to_pyarrow_listarray(arr.real)
+    imag = datasets.features.features.numpy_to_pyarrow_listarray(arr.imag)
+    return pa.StructArray.from_arrays([real, imag], names=["real", "imag"])
 
 
 # ┌────────────┐
@@ -259,7 +257,10 @@ def _load_array(dset, path: str, start: int, end: int) -> pa.Array:
         # to avoid creating FixedSizeListArray with list_size=0.
         if any(dim == 0 for dim in dset.shape[1:]):
             inner_type = pa.from_numpy_dtype(dset.dtype)
-            return pa.array([[] for _ in arr], type=pa.list_(inner_type))
+            n = len(arr)
+            empty_values = pa.array([], type=inner_type)
+            offsets = pa.array(np.zeros(n + 1, dtype=np.int32), type=pa.int32())
+            return pa.ListArray.from_arrays(offsets, empty_values)
         else:
             return datasets.features.features.numpy_to_pyarrow_listarray(arr)
 
