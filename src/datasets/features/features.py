@@ -31,7 +31,6 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
-import pyarrow.types
 from pandas.api.extensions import ExtensionArray as PandasExtensionArray
 from pandas.api.extensions import ExtensionDtype as PandasExtensionDtype
 
@@ -47,6 +46,30 @@ from .pdf import Pdf, encode_pdfplumber_pdf
 from .translation import Translation, TranslationVariableLanguages
 from .video import Video
 
+_ARROW_TYPE_ID_TO_DTYPE = {
+    pa.types.lib.Type_NA: "null",
+    pa.types.lib.Type_BOOL: "bool",
+    pa.types.lib.Type_INT8: "int8",
+    pa.types.lib.Type_INT16: "int16",
+    pa.types.lib.Type_INT32: "int32",
+    pa.types.lib.Type_INT64: "int64",
+    pa.types.lib.Type_UINT8: "uint8",
+    pa.types.lib.Type_UINT16: "uint16",
+    pa.types.lib.Type_UINT32: "uint32",
+    pa.types.lib.Type_UINT64: "uint64",
+    pa.types.lib.Type_HALF_FLOAT: "float16",
+    pa.types.lib.Type_FLOAT: "float32",
+    pa.types.lib.Type_DOUBLE: "float64",
+    pa.types.lib.Type_DATE32: "date32",
+    pa.types.lib.Type_DATE64: "date64",
+    pa.types.lib.Type_BINARY: "binary",
+    pa.types.lib.Type_LARGE_BINARY: "large_binary",
+    pa.types.lib.Type_BINARY_VIEW: "binary_view",
+    pa.types.lib.Type_STRING: "string",
+    pa.types.lib.Type_LARGE_STRING: "large_string",
+    pa.types.lib.Type_STRING_VIEW: "string_view",
+}
+
 
 logger = logging.get_logger(__name__)
 
@@ -56,66 +79,32 @@ def _arrow_to_datasets_dtype(arrow_type: pa.DataType) -> str:
     _arrow_to_datasets_dtype takes a pyarrow.DataType and converts it to a datasets string dtype.
     In effect, `dt == string_to_arrow(_arrow_to_datasets_dtype(dt))`
     """
-    if pyarrow.types.is_null(arrow_type):
-        return "null"
-    elif pyarrow.types.is_boolean(arrow_type):
-        return "bool"
-    elif pyarrow.types.is_int8(arrow_type):
-        return "int8"
-    elif pyarrow.types.is_int16(arrow_type):
-        return "int16"
-    elif pyarrow.types.is_int32(arrow_type):
-        return "int32"
-    elif pyarrow.types.is_int64(arrow_type):
-        return "int64"
-    elif pyarrow.types.is_uint8(arrow_type):
-        return "uint8"
-    elif pyarrow.types.is_uint16(arrow_type):
-        return "uint16"
-    elif pyarrow.types.is_uint32(arrow_type):
-        return "uint32"
-    elif pyarrow.types.is_uint64(arrow_type):
-        return "uint64"
-    elif pyarrow.types.is_float16(arrow_type):
-        return "float16"  # pyarrow dtype is "halffloat"
-    elif pyarrow.types.is_float32(arrow_type):
-        return "float32"  # pyarrow dtype is "float"
-    elif pyarrow.types.is_float64(arrow_type):
-        return "float64"  # pyarrow dtype is "double"
-    elif pyarrow.types.is_time32(arrow_type):
+    type_id = arrow_type.id
+    
+    # Fast path: simple types without parameters
+    dtype = _ARROW_TYPE_ID_TO_DTYPE.get(type_id)
+    if dtype is not None:
+        return dtype
+    
+    # Handle types with parameters
+    if type_id == pa.types.lib.Type_TIME32:
         return f"time32[{pa.type_for_alias(str(arrow_type)).unit}]"
-    elif pyarrow.types.is_time64(arrow_type):
+    elif type_id == pa.types.lib.Type_TIME64:
         return f"time64[{pa.type_for_alias(str(arrow_type)).unit}]"
-    elif pyarrow.types.is_timestamp(arrow_type):
+    elif type_id == pa.types.lib.Type_TIMESTAMP:
         if arrow_type.tz is None:
             return f"timestamp[{arrow_type.unit}]"
         elif arrow_type.tz:
             return f"timestamp[{arrow_type.unit}, tz={arrow_type.tz}]"
         else:
             raise ValueError(f"Unexpected timestamp object {arrow_type}.")
-    elif pyarrow.types.is_date32(arrow_type):
-        return "date32"  # pyarrow dtype is "date32[day]"
-    elif pyarrow.types.is_date64(arrow_type):
-        return "date64"  # pyarrow dtype is "date64[ms]"
-    elif pyarrow.types.is_duration(arrow_type):
+    elif type_id == pa.types.lib.Type_DURATION:
         return f"duration[{arrow_type.unit}]"
-    elif pyarrow.types.is_decimal128(arrow_type):
+    elif type_id == pa.types.lib.Type_DECIMAL128:
         return f"decimal128({arrow_type.precision}, {arrow_type.scale})"
-    elif pyarrow.types.is_decimal256(arrow_type):
+    elif type_id == pa.types.lib.Type_DECIMAL256:
         return f"decimal256({arrow_type.precision}, {arrow_type.scale})"
-    elif pyarrow.types.is_binary(arrow_type):
-        return "binary"
-    elif pyarrow.types.is_large_binary(arrow_type):
-        return "large_binary"
-    elif pyarrow.types.is_binary_view(arrow_type):
-        return "binary_view"
-    elif pyarrow.types.is_string(arrow_type):
-        return "string"
-    elif pyarrow.types.is_large_string(arrow_type):
-        return "large_string"
-    elif pyarrow.types.is_string_view(arrow_type):
-        return "string_view"
-    elif pyarrow.types.is_dictionary(arrow_type):
+    elif type_id == pa.types.lib.Type_DICTIONARY:
         return _arrow_to_datasets_dtype(arrow_type.value_type)
     else:
         raise ValueError(f"Arrow type {arrow_type} does not have a datasets dtype equivalent.")
