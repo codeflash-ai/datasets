@@ -1,3 +1,4 @@
+from __future__ import annotations
 import importlib.util
 import os
 import tempfile
@@ -448,8 +449,13 @@ class IndexableMixin:
         Returns:
             [`BaseIndex`]
         """
-        self._check_index_is_initialized(index_name)
-        return self._indexes[index_name]
+        try:
+            return self._indexes[index_name]
+        except KeyError:
+            # Fall back to the original check which may raise MissingIndex.
+            # If it doesn't raise, re-raise the original KeyError to preserve behavior.
+            self._check_index_is_initialized(index_name)
+            raise
 
     def add_faiss_index(
         self,
