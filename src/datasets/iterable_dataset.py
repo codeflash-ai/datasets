@@ -1802,12 +1802,11 @@ class SkipExamplesIterable(_BaseExamplesIterable):
 
     @staticmethod
     def split_number(num, n):
-        quotient = num // n
-        remainder = num % n
-        result = [quotient] * n
-        for i in range(remainder):
-            result[i] += 1
-        return result
+        quotient, remainder = divmod(num, n)
+        if remainder == 0:
+            return [quotient] * n
+        # Put the +1 counts in the first `remainder` slots, then the base `quotient` in the rest.
+        return [quotient + 1] * remainder + [quotient] * (n - remainder)
 
     def shuffle_data_sources(self, generator: np.random.Generator) -> "SkipExamplesIterable":
         """May not shuffle the wrapped examples iterable since it would skip examples from other shards instead."""
