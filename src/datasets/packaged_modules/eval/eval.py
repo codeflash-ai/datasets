@@ -52,7 +52,13 @@ class Eval(datasets.GeneratorBasedBuilder):
 
     def _sort_samples_key(self, sample_path: str):
         # looks like "{sample_idx}_epoch_{epoch_idx}""
-        (sample_idx_str, epoch_idx_str) = os.path.splitext(os.path.basename(sample_path))[0].split("_epoch_")
+        last_sep = sample_path.rfind(os.sep)
+        dot_idx = sample_path.rfind('.')
+        if dot_idx > last_sep:
+            name = sample_path[last_sep + 1:dot_idx]
+        else:
+            name = sample_path[last_sep + 1:]
+        (sample_idx_str, epoch_idx_str) = name.split("_epoch_")
         return (int(epoch_idx_str), int(sample_idx_str))
 
     def _iter_samples_from_log_files(self, log_files: Iterable[str]):
