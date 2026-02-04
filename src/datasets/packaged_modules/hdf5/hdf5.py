@@ -102,9 +102,14 @@ class HDF5(datasets.ArrowBasedBuilder):
 def _is_complex_dtype(dtype: np.dtype) -> bool:
     if dtype.kind == "c":
         return True
-    if dtype.subdtype is not None:
-        return _is_complex_dtype(dtype.subdtype[0])
-    return False
+    # Iteratively descend into subdtype to avoid recursion overhead
+    while True:
+        sub = dtype.subdtype
+        if sub is None:
+            return False
+        dtype = sub[0]
+        if dtype.kind == "c":
+            return True
 
 
 def _create_complex_features(dset) -> Features:
