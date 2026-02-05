@@ -89,6 +89,7 @@ from .utils.logging import get_logger
 from .utils.metadata import MetadataConfigs
 from .utils.typing import PathLike
 from .utils.version import Version
+from functools import lru_cache
 
 
 logger = get_logger(__name__)
@@ -152,6 +153,7 @@ def configure_builder_class(
     return ConfiguredDatasetBuilder
 
 
+@lru_cache(maxsize=None)
 def import_main_class(module_path) -> Optional[type[DatasetBuilder]]:
     """Import a module at module_path and return its main class: a DatasetBuilder"""
     module = importlib.import_module(module_path)
@@ -308,32 +310,57 @@ def create_builder_configs_from_metadata_configs(
 ) -> tuple[list[BuilderConfig], str]:
     builder_cls = import_main_class(module_path)
     builder_config_cls = builder_cls.BUILDER_CONFIG_CLASS
+    # Precompute attribute names for the builder config class to avoid repeated hasattr checks
+    builder_config_attrs = set(dir(builder_config_cls))
     default_config_name = metadata_configs.get_default_config_name()
     builder_configs = []
     default_builder_kwargs = {} if default_builder_kwargs is None else default_builder_kwargs
 
     base_path = base_path if base_path is not None else ""
+
+    # Local cache for sanitize_patterns to avoid re-processing identical inputs
+    _sanitize_cache: dict[object, dict[str, Any]] = {}
+
     for config_name, config_params in metadata_configs.items():
         config_data_files = config_params.get("data_files")
         config_data_dir = config_params.get("data_dir")
         config_base_path = xjoin(base_path, config_data_dir) if config_data_dir else base_path
         try:
-            config_patterns = (
-                sanitize_patterns(config_data_files)
-                if config_data_files is not None
-                else get_data_patterns(config_base_path, download_config=download_config)
-            )
-            config_data_files_dict = DataFilesPatternsDict.from_patterns(
-                config_patterns,
-                allowed_extensions=_ALL_ALLOWED_EXTENSIONS,
-            )
+            # If data_files is already a dict with list values we can skip sanitize_patterns
+            if config_data_files is not None and isinstance(config_data_files, dict) and all(
+                isinstance(v, list) for v in config_data_files.values()
+            ):
+                config_patterns = config_data_files
+            elif config_data_files is not None:
+                # Try to reuse sanitize result if possible
+                try:
+                    # Try to use a hashable key when possible
+                    key = ("h", hash(config_data_files))
+                except Exception:
+                    key = ("id", id(config_data_files))
+                if key in _sanitize_cache:
+                    config_patterns = _sanitize_cache[key]
+                else:
+                    config_patterns = sanitize_patterns(config_data_files)
+                    _sanitize_cache[key] = config_patterns
+            else:
+                config_patterns = get_data_patterns(config_base_path, download_config=download_config)
+
+            # If config_patterns is already a DataFilesPatternsDict, keep it, else convert
+            if isinstance(config_patterns, DataFilesPatternsDict):
+                config_data_files_dict = config_patterns
+            else:
+                config_data_files_dict = DataFilesPatternsDict.from_patterns(
+                    config_patterns,
+                    allowed_extensions=_ALL_ALLOWED_EXTENSIONS,
+                )
         except EmptyDatasetError as e:
             raise EmptyDatasetError(
                 f"Dataset at '{base_path}' doesn't contain data files matching the patterns for config '{config_name}',"
                 f" check `data_files` and `data_fir` parameters in the `configs` YAML field in README.md. "
             ) from e
         ignored_params = [
-            param for param in config_params if not hasattr(builder_config_cls, param) and param != "default"
+            param for param in config_params if param not in builder_config_attrs and param != "default"
         ]
         if ignored_params:
             logger.warning(
@@ -341,16 +368,21 @@ def create_builder_configs_from_metadata_configs(
                 "Make sure to use only valid params for the dataset builder and to have "
                 "a up-to-date version of the `datasets` library."
             )
+
+        # Build kwargs for builder_config_cls using precomputed attribute membership
+        merged_params = {**default_builder_kwargs, **config_params}
+        builder_specific_kwargs = {
+            param: value
+            for param, value in merged_params.items()
+            if param in builder_config_attrs and param not in ("default", "data_files", "data_dir")
+        }
+
         builder_configs.append(
             builder_config_cls(
                 name=config_name,
                 data_files=config_data_files_dict,
                 data_dir=config_data_dir,
-                **{
-                    param: value
-                    for param, value in {**default_builder_kwargs, **config_params}.items()
-                    if hasattr(builder_config_cls, param) and param not in ("default", "data_files", "data_dir")
-                },
+                **builder_specific_kwargs,
             )
         )
     return builder_configs, default_config_name
