@@ -19,6 +19,8 @@ import itertools
 import os
 import re
 
+_token_re = re.compile(r"__+|[^_]+")
+
 
 _uppercase_uppercase_re = re.compile(r"([A-Z]+)([A-Z][a-z])")
 _lowercase_uppercase_re = re.compile(r"([a-z\d])([A-Z])")
@@ -40,9 +42,8 @@ def camelcase_to_snakecase(name):
 
 def snakecase_to_camelcase(name):
     """Convert snake-case string to camel-case string."""
-    name = _single_underscore_re.split(name)
-    name = [_multiple_underscores_re.split(n) for n in name]
-    return "".join(n.capitalize() for n in itertools.chain.from_iterable(name) if n != "")
+    name = _token_re.findall(name)
+    return "".join(n.capitalize() for n in name if n != "")
 
 
 def filename_prefix_for_name(name):
