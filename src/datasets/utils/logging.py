@@ -34,6 +34,8 @@ from .tqdm import (  # noqa: F401 # imported for backward compatibility
     tqdm,
 )
 
+_LIBRARY_NAME = __name__.split(".")[0]
+
 
 log_levels = {
     "debug": logging.DEBUG,
@@ -63,7 +65,7 @@ def _get_default_logging_level():
 
 
 def _get_library_name() -> str:
-    return __name__.split(".")[0]
+    return _LIBRARY_NAME
 
 
 def _get_library_root_logger() -> logging.Logger:
