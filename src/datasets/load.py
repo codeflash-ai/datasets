@@ -142,12 +142,13 @@ def configure_builder_class(
                 self.__dict__.copy(),
             )
 
-    ConfiguredDatasetBuilder.__name__ = (
-        f"{builder_cls.__name__.lower().capitalize()}{snakecase_to_camelcase(dataset_name)}"
-    )
-    ConfiguredDatasetBuilder.__qualname__ = (
-        f"{builder_cls.__name__.lower().capitalize()}{snakecase_to_camelcase(dataset_name)}"
-    )
+    # Avoid repeated computations by computing components once
+    _prefix = builder_cls.__name__.lower().capitalize()
+    _camel_dataset = snakecase_to_camelcase(dataset_name)
+    composed_name = f"{_prefix}{_camel_dataset}"
+    ConfiguredDatasetBuilder.__name__ = composed_name
+    ConfiguredDatasetBuilder.__qualname__ = composed_name
+
 
     return ConfiguredDatasetBuilder
 
