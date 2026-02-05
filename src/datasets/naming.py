@@ -14,8 +14,6 @@
 
 # Lint as: python3
 """Utilities for file names."""
-
-import itertools
 import os
 import re
 
@@ -40,9 +38,16 @@ def camelcase_to_snakecase(name):
 
 def snakecase_to_camelcase(name):
     """Convert snake-case string to camel-case string."""
-    name = _single_underscore_re.split(name)
-    name = [_multiple_underscores_re.split(n) for n in name]
-    return "".join(n.capitalize() for n in itertools.chain.from_iterable(name) if n != "")
+    # Avoid creating nested lists and using itertools.chain by building the output
+    # list in-place. This reduces temporary allocations and iterator overhead.
+    parts = []
+    for part in _single_underscore_re.split(name):
+        if not part:
+            continue
+        for sub in _multiple_underscores_re.split(part):
+            if sub:
+                parts.append(sub.capitalize())
+    return "".join(parts)
 
 
 def filename_prefix_for_name(name):
