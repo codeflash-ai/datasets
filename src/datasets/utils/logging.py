@@ -33,6 +33,7 @@ from .tqdm import (  # noqa: F401 # imported for backward compatibility
     is_progress_bar_enabled,
     tqdm,
 )
+from functools import lru_cache
 
 
 log_levels = {
@@ -66,6 +67,7 @@ def _get_library_name() -> str:
     return __name__.split(".")[0]
 
 
+@lru_cache(maxsize=1)
 def _get_library_root_logger() -> logging.Logger:
     return logging.getLogger(_get_library_name())
 
