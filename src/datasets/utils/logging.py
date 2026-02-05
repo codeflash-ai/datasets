@@ -113,7 +113,7 @@ def set_verbosity(verbosity: int) -> None:
         verbosity:
             Logging level, e.g., `datasets.logging.DEBUG` and `datasets.logging.INFO`.
     """
-    _get_library_root_logger().setLevel(verbosity)
+    _logger.setLevel(verbosity)
 
 
 def set_verbosity_info():
@@ -169,6 +169,8 @@ def enable_propagation() -> None:
     been configured.
     """
     _get_library_root_logger().propagate = True
+
+_logger = _get_library_root_logger()
 
 
 # Configure the library root logger at the module level (singleton-like)
