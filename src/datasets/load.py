@@ -157,14 +157,17 @@ def import_main_class(module_path) -> Optional[type[DatasetBuilder]]:
     module = importlib.import_module(module_path)
     # Find the main class in our imported module
     module_main_cls = None
-    for name, obj in module.__dict__.items():
-        if inspect.isclass(obj) and issubclass(obj, DatasetBuilder):
-            if inspect.isabstract(obj):
-                continue
-            module_main_cls = obj
-            obj_module = inspect.getmodule(obj)
-            if obj_module is not None and module == obj_module:
-                break
+    for obj in module.__dict__.values():
+        if not isinstance(obj, type):
+            continue
+        if not issubclass(obj, DatasetBuilder):
+            continue
+        if inspect.isabstract(obj):
+            continue
+        module_main_cls = obj
+        # Prefer classes defined in the module itself
+        if getattr(obj, "__module__", None) == module.__name__:
+            break
 
     return module_main_cls
 
