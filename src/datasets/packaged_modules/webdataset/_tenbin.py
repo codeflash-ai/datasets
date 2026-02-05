@@ -39,10 +39,10 @@ import numpy as np
 
 def bytelen(a):
     """Determine the length of a in bytes."""
-    if hasattr(a, "nbytes"):
-        return a.nbytes
-    elif isinstance(a, (bytearray, bytes)):
+    if isinstance(a, (bytearray, bytes)):
         return len(a)
+    elif hasattr(a, "nbytes"):
+        return a.nbytes
     else:
         raise ValueError(a, "cannot determine nbytes")
 
@@ -200,10 +200,10 @@ def decode_chunks(buf):
         if magic_bytes != buf[offset : offset + 8]:
             raise ValueError("magic bytes mismatch")
         offset += 8
-        nbytes = struct.unpack("@q", buf[offset : offset + 8])[0]
+        nbytes = struct.unpack_from("@q", buf, offset)[0]
         offset += 8
         b = buf[offset : offset + nbytes]
-        offset += roundup(nbytes)
+        offset += 64 * ((nbytes + 63) // 64)
         result.append(b)
     return result
 
