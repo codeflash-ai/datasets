@@ -487,7 +487,10 @@ def map_nested(
         types = tuple(types)
 
     # Singleton
-    if not isinstance(data_struct, dict) and not isinstance(data_struct, types):
+    is_dict = isinstance(data_struct, dict)
+    is_types = isinstance(data_struct, types)
+    
+    if not is_dict and not is_types:
         if batched:
             data_struct = [data_struct]
         mapped = function(data_struct)
@@ -495,7 +498,8 @@ def map_nested(
             mapped = mapped[0]
         return mapped
 
-    iterable = list(data_struct.values()) if isinstance(data_struct, dict) else data_struct
+    iterable = list(data_struct.values()) if is_dict else data_struct
+
 
     if num_proc is None:
         num_proc = 1
@@ -517,12 +521,33 @@ def map_nested(
             if batch_size is None or batch_size <= 0:
                 batch_size = max(len(iterable) // num_proc + int(len(iterable) % num_proc > 0), 1)
             iterable = list(iter_batched(iterable, batch_size))
-        mapped = [
-            _single_map_nested((function, obj, batched, batch_size, types, None, True, None))
-            for obj in hf_tqdm(iterable, disable=disable_tqdm, desc=desc)
-        ]
-        if batched:
+            mapped = [
+                _single_map_nested((function, obj, batched, batch_size, types, None, True, None))
+                for obj in hf_tqdm(iterable, disable=disable_tqdm, desc=desc)
+            ]
             mapped = [mapped_item for mapped_batch in mapped for mapped_item in mapped_batch]
+        else:
+            # Optimized path for non-batched case: inline the logic to avoid function call overhead
+            mapped = []
+            for obj in hf_tqdm(iterable, disable=disable_tqdm, desc=desc):
+                if not isinstance(obj, dict) and not isinstance(obj, types):
+                    mapped.append(function(obj))
+                elif isinstance(obj, dict):
+                    mapped.append({
+                        k: _single_map_nested((function, v, False, batch_size, types, None, True, None)) 
+                        for k, v in obj.items()
+                    })
+                else:
+                    inner_mapped = [
+                        _single_map_nested((function, v, False, batch_size, types, None, True, None)) 
+                        for v in obj
+                    ]
+                    if isinstance(obj, list):
+                        mapped.append(inner_mapped)
+                    elif isinstance(obj, tuple):
+                        mapped.append(tuple(inner_mapped))
+                    else:
+                        mapped.append(np.array(inner_mapped))
     else:
         with warnings.catch_warnings():
             warnings.filterwarnings(
@@ -540,7 +565,7 @@ def map_nested(
             if batched:
                 mapped = [mapped_item for mapped_batch in mapped for mapped_item in mapped_batch]
 
-    if isinstance(data_struct, dict):
+    if is_dict:
         return dict(zip(data_struct.keys(), mapped))
     else:
         if isinstance(data_struct, list):
