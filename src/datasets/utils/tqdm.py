@@ -72,6 +72,8 @@ def disable_progress_bars() -> None:
         )
         return
     global _hf_datasets_progress_bars_disabled
+    if _hf_datasets_progress_bars_disabled:
+        return
     _hf_datasets_progress_bars_disabled = True
 
 
