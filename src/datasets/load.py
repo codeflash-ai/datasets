@@ -216,11 +216,13 @@ def infer_module_for_data_files_list(
             - inferred module name
             - dict of builder kwargs
     """
-    extensions_counter = Counter(
-        ("." + suffix.lower(), xbasename(filepath) in FolderBasedBuilder.METADATA_FILENAMES)
-        for filepath in data_files_list
-        for suffix in xbasename(filepath).split(".")[1:]
-    )
+    extensions_counter = Counter()
+    for filepath in data_files_list:
+        base = xbasename(filepath)
+        is_metadata = base in FolderBasedBuilder.METADATA_FILENAMES
+        for suffix in base.split(".")[1:]:
+            extensions_counter[("." + suffix.lower(), is_metadata)] += 1
+
     if extensions_counter:
 
         def sort_key(ext_count: tuple[tuple[str, bool], int]) -> tuple[int, bool]:
