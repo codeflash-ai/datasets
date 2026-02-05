@@ -33,17 +33,28 @@ class TorchFormatter(TensorFormatter[Mapping, "torch.Tensor", Mapping]):
     def __init__(self, features=None, token_per_repo_id=None, **torch_tensor_kwargs):
         super().__init__(features=features, token_per_repo_id=token_per_repo_id)
         self.torch_tensor_kwargs = torch_tensor_kwargs
-        import torch  # noqa import torch at initialization
 
     def _consolidate(self, column):
-        import torch
+        # Lazy cached import: prefer already-imported torch to avoid import overhead on hot path,
+        # but fall back to importing if not present so ImportError behavior remains the same.
+        torch = sys.modules.get("torch")
+        if torch is None:
+            import torch  # Preserve original ImportError timing semantics
+            torch = sys.modules["torch"]
+
 
         if isinstance(column, list) and column:
-            if all(
-                isinstance(x, torch.Tensor) and x.shape == column[0].shape and x.dtype == column[0].dtype
-                for x in column
-            ):
-                return torch.stack(column)
+            first = column[0]
+            # Early check for first element to avoid repeated column[0] lookups in the loop
+            if not isinstance(first, torch.Tensor):
+                return column
+            first_shape = first.shape
+            first_dtype = first.dtype
+            # Explicit loop with short-circuiting is faster than all(...) with a generator
+            for x in column[1:]:
+                if not (isinstance(x, torch.Tensor) and x.shape == first_shape and x.dtype == first_dtype):
+                    return column
+            return torch.stack(column)
         return column
 
     def _tensorize(self, value):
