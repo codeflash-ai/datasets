@@ -132,4 +132,4 @@ disable_progress_bar = disable_progress_bars
 
 
 def is_progress_bar_enabled():
-    return not are_progress_bars_disabled()
+    return not _hf_datasets_progress_bars_disabled
