@@ -33,21 +33,24 @@ class TorchFormatter(TensorFormatter[Mapping, "torch.Tensor", Mapping]):
     def __init__(self, features=None, token_per_repo_id=None, **torch_tensor_kwargs):
         super().__init__(features=features, token_per_repo_id=token_per_repo_id)
         self.torch_tensor_kwargs = torch_tensor_kwargs
-        import torch  # noqa import torch at initialization
+
+        import torch
+        self.torch = torch
 
     def _consolidate(self, column):
-        import torch
 
         if isinstance(column, list) and column:
-            if all(
-                isinstance(x, torch.Tensor) and x.shape == column[0].shape and x.dtype == column[0].dtype
-                for x in column
-            ):
-                return torch.stack(column)
+            first = column[0]
+            if isinstance(first, self.torch.Tensor):
+                first_shape = first.shape
+                first_dtype = first.dtype
+                for x in column[1:]:
+                    if not isinstance(x, self.torch.Tensor) or x.shape != first_shape or x.dtype != first_dtype:
+                        return column
+                return self.torch.stack(column)
         return column
 
     def _tensorize(self, value):
-        import torch
 
         if isinstance(value, (str, bytes, type(None))):
             return value
@@ -56,16 +59,18 @@ class TorchFormatter(TensorFormatter[Mapping, "torch.Tensor", Mapping]):
 
         default_dtype = {}
 
-        if isinstance(value, (np.number, np.ndarray)) and np.issubdtype(value.dtype, np.integer):
-            default_dtype = {"dtype": torch.int64}
+        if isinstance(value, (np.number, np.ndarray)):
+            if np.issubdtype(value.dtype, np.integer):
+                default_dtype = {"dtype": self.torch.int64}
 
-            # Convert dtype to np.int64 if it's either np.uint16 or np.uint32 to ensure compatibility.
-            # np.uint64 is excluded from this conversion as there is no compatible PyTorch dtype that can handle it without loss.
-            if value.dtype in [np.uint16, np.uint32]:
-                value = value.astype(np.int64)
+                # Convert dtype to np.int64 if it's either np.uint16 or np.uint32 to ensure compatibility.
+                # np.uint64 is excluded from this conversion as there is no compatible PyTorch dtype that can handle it without loss.
+                if value.dtype in [np.uint16, np.uint32]:
+                    value = value.astype(np.int64)
 
-        elif isinstance(value, (np.number, np.ndarray)) and np.issubdtype(value.dtype, np.floating):
-            default_dtype = {"dtype": torch.float32}
+            elif np.issubdtype(value.dtype, np.floating):
+                default_dtype = {"dtype": self.torch.float32}
+
 
         if config.PIL_AVAILABLE and "PIL" in sys.modules:
             import PIL.Image
@@ -87,13 +92,11 @@ class TorchFormatter(TensorFormatter[Mapping, "torch.Tensor", Mapping]):
             if isinstance(value, (VideoDecoder, AudioDecoder)):
                 return value  # TODO(QL): set output to jax arrays ?
 
-        return torch.tensor(value, **{**default_dtype, **self.torch_tensor_kwargs})
+        return self.torch.tensor(value, **{**default_dtype, **self.torch_tensor_kwargs})
 
     def _recursive_tensorize(self, data_struct):
-        import torch
-
         # support for torch, tf, jax etc.
-        if hasattr(data_struct, "__array__") and not isinstance(data_struct, torch.Tensor):
+        if hasattr(data_struct, "__array__") and not isinstance(data_struct, self.torch.Tensor):
             data_struct = data_struct.__array__()
         # support for nested types like struct of list of struct
         if isinstance(data_struct, np.ndarray):
