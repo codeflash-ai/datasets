@@ -27,14 +27,13 @@ from .xml import xml
 def _hash_python_lines(lines: list[str]) -> str:
     filtered_lines = []
     for line in lines:
-        line = re.sub(r"#.*", "", line)  # remove comments
+        line = line.partition("#")[0]  # remove comments
         if line:
             filtered_lines.append(line)
     full_str = "\n".join(filtered_lines)
 
     # Make a hash from all this code
-    full_bytes = full_str.encode("utf-8")
-    return insecure_hashlib.sha256(full_bytes).hexdigest()
+    return insecure_hashlib.sha256(full_str.encode("utf-8")).hexdigest()
 
 
 # get importable module names and hash for caching
