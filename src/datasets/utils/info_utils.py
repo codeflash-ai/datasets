@@ -44,13 +44,25 @@ def verify_checksums(expected_checksums: Optional[dict], recorded_checksums: dic
     if expected_checksums is None:
         logger.info("Unable to verify checksums.")
         return
-    if len(set(expected_checksums) - set(recorded_checksums)) > 0:
-        raise ExpectedMoreDownloadedFilesError(str(set(expected_checksums) - set(recorded_checksums)))
-    if len(set(recorded_checksums) - set(expected_checksums)) > 0:
-        raise UnexpectedDownloadedFileError(str(set(recorded_checksums) - set(expected_checksums)))
-    bad_urls = [url for url in expected_checksums if expected_checksums[url] != recorded_checksums[url]]
+    # Compute key sets once to avoid repeated set constructions
+    expected_keys = set(expected_checksums)
+    recorded_keys = set(recorded_checksums)
+
+    missing = expected_keys - recorded_keys
+    if missing:
+        raise ExpectedMoreDownloadedFilesError(str(missing))
+    unexpected = recorded_keys - expected_keys
+    if unexpected:
+        raise UnexpectedDownloadedFileError(str(unexpected))
+
+    # Keys are the same; collect mismatching checksums with a single lookup for expected value
+    bad_urls = []
+    for url, expected in expected_checksums.items():
+        if recorded_checksums[url] != expected:
+            bad_urls.append(url)
+
     for_verification_name = " for " + verification_name if verification_name is not None else ""
-    if len(bad_urls) > 0:
+    if bad_urls:
         raise NonMatchingChecksumError(
             f"Checksums didn't match{for_verification_name}:\n"
             f"{bad_urls}\n"
