@@ -90,14 +90,18 @@ def _interpolation_search(arr: list[int], x: int) -> int:
         `IndexError`: if the array is empty or if the query is outside the array values
     """
     i, j = 0, len(arr) - 1
-    while i < j and arr[i] <= x < arr[j]:
-        k = i + ((j - i) * (x - arr[i]) // (arr[j] - arr[i]))
+    arr_i = arr[i]
+    arr_j = arr[j]
+    while i < j and arr_i <= x < arr_j:
+        k = i + ((j - i) * (x - arr_i) // (arr_j - arr_i))
         if arr[k] <= x < arr[k + 1]:
             return k
         elif arr[k] < x:
-            i, j = k + 1, j
+            i = k + 1
+            arr_i = arr[i]
         else:
-            i, j = i, k
+            j = k
+            arr_j = arr[k]
     raise IndexError(f"Invalid query '{x}' for size {arr[-1] if len(arr) else 'none'}.")
 
 
