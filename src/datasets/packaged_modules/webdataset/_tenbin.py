@@ -59,21 +59,45 @@ def bytedata(a):
 
 # tables for converting between long/short NumPy dtypes
 
-long_to_short = """
-float16 f2
-float32 f4
-float64 f8
-int8 i1
-int16 i2
-int32 i4
-int64 i8
-uint8 u1
-uint16 u2
-unit32 u4
-uint64 u8
-""".strip()
-long_to_short = [x.split() for x in long_to_short.split("\n")]
-long_to_short = {x[0]: x[1] for x in long_to_short}
+long_to_short = {
+    "float16": "f2",
+    "float32": "f4",
+    "float64": "f8",
+    "int8": "i1",
+    "int16": "i2",
+    "int32": "i4",
+    "int64": "i8",
+    "uint8": "u1",
+    "uint16": "u2",
+    "unit32": "u4",
+    "uint64": "u8",
+}
+long_to_short = {
+    "float16": "f2",
+    "float32": "f4",
+    "float64": "f8",
+    "int8": "i1",
+    "int16": "i2",
+    "int32": "i4",
+    "int64": "i8",
+    "uint8": "u1",
+    "uint16": "u2",
+    "unit32": "u4",
+    "uint64": "u8",
+}
+long_to_short = {
+    "float16": "f2",
+    "float32": "f4",
+    "float64": "f8",
+    "int8": "i1",
+    "int16": "i2",
+    "int32": "i4",
+    "int64": "i8",
+    "uint8": "u1",
+    "uint16": "u2",
+    "unit32": "u4",
+    "uint64": "u8",
+}
 short_to_long = {v: k for k, v in long_to_short.items()}
 
 
@@ -120,12 +144,21 @@ def encode_header(a, info=""):
     """Encode an array header as a byte array."""
     if a.ndim >= 10:
         raise ValueError("too many dimensions")
-    if a.nbytes != np.prod(a.shape) * a.itemsize:
+    # Use a.size instead of np.prod(a.shape) for speed and robustness
+    if a.nbytes != a.size * a.itemsize:
         raise ValueError("mismatch between size and shape")
-    if a.dtype.name not in long_to_short:
+    dtype_name = a.dtype.name
+    if dtype_name not in long_to_short:
         raise ValueError("unsupported array type")
-    header = [str64(long_to_short[a.dtype.name]), str64(info), len(a.shape)] + list(a.shape)
-    return bytedata(np.array(header, dtype="i8"))
+    # Build header directly into an int64 numpy array to avoid intermediate lists
+    n = a.ndim
+    header_arr = np.empty(3 + n, dtype="i8")
+    header_arr[0] = str64(long_to_short[dtype_name])
+    header_arr[1] = str64(info)
+    header_arr[2] = n
+    if n:
+        header_arr[3:] = a.shape
+    return bytedata(header_arr)
 
 
 def decode_header(h):
@@ -148,9 +181,16 @@ def encode_list(l, infos=None):  # noqa: E741
         if len(l) != len(infos):
             raise ValueError(f"length of list {l} must muatch length of infos {infos}")
     result = []
-    for i, a in enumerate(l):
-        header = encode_header(a, infos[i % len(infos)])
-        result += [header, bytedata(a)]
+    infos_len = len(infos)
+    if infos_len == 1:
+        info0 = infos[0]
+        for a in l:
+            header = encode_header(a, info0)
+            result.extend((header, bytedata(a)))
+    else:
+        for i, a in enumerate(l):
+            header = encode_header(a, infos[i])
+            result.extend((header, bytedata(a)))
     return result
 
 
