@@ -33,9 +33,19 @@ INVALID_WINDOWS_CHARACTERS_IN_PATH = r"<>:/\|?*"
 
 def camelcase_to_snakecase(name):
     """Convert camel-case string to snake-case."""
-    name = _uppercase_uppercase_re.sub(r"\1_\2", name)
-    name = _lowercase_uppercase_re.sub(r"\1_\2", name)
-    return name.lower()
+    out_chars = []
+    n = len(name)
+    for i, ch in enumerate(name):
+        if 'A' <= ch <= 'Z' and i > 0:
+            prev = name[i - 1]
+            # Insert underscore if prev is lowercase or digit
+            if 'a' <= prev <= 'z' or '0' <= prev <= '9':
+                out_chars.append('_')
+            # Insert underscore if prev is uppercase and next is lowercase (acronym split)
+            elif 'A' <= prev <= 'Z' and i + 1 < n and 'a' <= name[i + 1] <= 'z':
+                out_chars.append('_')
+        out_chars.append(ch)
+    return ''.join(out_chars).lower()
 
 
 def snakecase_to_camelcase(name):
