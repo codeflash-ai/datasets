@@ -52,11 +52,10 @@ def filename_prefix_for_name(name):
 
 
 def filename_prefix_for_split(name, split):
-    if os.path.basename(name) != name:
-        raise ValueError(f"Should be a dataset name, not a path: {name}")
+    _validate_dataset_name(name)
     if not re.match(_split_re, split):
         raise ValueError(f"Split name should match '{_split_re}'' but got '{split}'.")
-    return f"{filename_prefix_for_name(name)}-{split}"
+    return f"{camelcase_to_snakecase(name)}-{split}"
 
 
 def filepattern_for_dataset_split(dataset_name, split, data_dir, filetype_suffix=None):
@@ -82,3 +81,16 @@ def filenames_for_dataset_split(path, dataset_name, split, filetype_suffix=None,
         if filetype_suffix:
             filename += f".{filetype_suffix}"
         return [filename]
+
+
+
+def _validate_dataset_name(name):
+    """Validate that name is a dataset name, not a path."""
+    if os.path.basename(name) != name:
+        raise ValueError(f"Should be a dataset name, not a path: {name}")
+
+
+def _validate_dataset_name(name):
+    """Validate that name is a dataset name, not a path."""
+    if os.path.basename(name) != name:
+        raise ValueError(f"Should be a dataset name, not a path: {name}")
