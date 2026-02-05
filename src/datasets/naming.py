@@ -33,9 +33,36 @@ INVALID_WINDOWS_CHARACTERS_IN_PATH = r"<>:/\|?*"
 
 def camelcase_to_snakecase(name):
     """Convert camel-case string to snake-case."""
-    name = _uppercase_uppercase_re.sub(r"\1_\2", name)
-    name = _lowercase_uppercase_re.sub(r"\1_\2", name)
-    return name.lower()
+    # Single-pass implementation to insert underscores where the two regexes would.
+    # We mirror the original character classes ([A-Z], [a-z], [0-9]) using ASCII
+    # comparisons to preserve the original regex behavior precisely.
+    s = name
+    n = len(s)
+    if n == 0:
+        return s.lower()
+    out: list[str] = []
+    append = out.append
+    for i, ch in enumerate(s):
+        # Check ASCII uppercase range to match original regex [A-Z]
+        if 'A' <= ch <= 'Z':
+            if i > 0:
+                prev = s[i - 1]
+                # If previous is ASCII lowercase or digit -> insert underscore
+                if ('a' <= prev <= 'z') or ('0' <= prev <= '9'):
+                    append('_')
+                else:
+                    # If previous is ASCII uppercase and next is ASCII lowercase -> insert underscore
+                    if 'A' <= prev <= 'Z':
+                        j = i + 1
+                        if j < n:
+                            nxt = s[j]
+                            if 'a' <= nxt <= 'z':
+                                append('_')
+            append(ch)
+        else:
+            append(ch)
+    # Final lowercasing to match the original implementation's .lower()
+    return ''.join(out).lower()
 
 
 def snakecase_to_camelcase(name):
@@ -46,7 +73,7 @@ def snakecase_to_camelcase(name):
 
 
 def filename_prefix_for_name(name):
-    if os.path.basename(name) != name:
+    if os.sep in name or (os.altsep and os.altsep in name):
         raise ValueError(f"Should be a dataset name, not a path: {name}")
     return camelcase_to_snakecase(name)
 
