@@ -89,6 +89,9 @@ def enable_progress_bars() -> None:
         )
         return
     global _hf_datasets_progress_bars_disabled
+    # Avoid redundant assignment when already enabled to reduce unnecessary global writes.
+    if not _hf_datasets_progress_bars_disabled:
+        return
     _hf_datasets_progress_bars_disabled = False
 
 
