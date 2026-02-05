@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     import lance
     import lance.file
 
+_HF_URI_RE = re.compile(r"(hf://.+?)(@[0-9a-f]+)(/.*)")
+
 logger = datasets.utils.logging.get_logger(__name__)
 
 MAGIC_BYTES_EXTENSION_AND_FEATURE_TYPES = [
@@ -72,7 +74,7 @@ def resolve_dataset_uris(files: List[str]) -> Dict[str, List[str]]:
 def _fix_hf_uri(uri: str) -> str:
     # replace the revision tag from hf uri
     if "@" in uri:
-        matched = re.match(r"(hf://.+?)(@[0-9a-f]+)(/.*)", uri)
+        matched = _HF_URI_RE.match(uri)
         if matched:
             uri = matched.group(1) + matched.group(3)
     return uri
