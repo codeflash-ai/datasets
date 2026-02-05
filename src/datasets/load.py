@@ -89,6 +89,7 @@ from .utils.logging import get_logger
 from .utils.metadata import MetadataConfigs
 from .utils.typing import PathLike
 from .utils.version import Version
+import sys
 
 
 logger = get_logger(__name__)
@@ -130,7 +131,7 @@ def configure_builder_class(
         __module__ = builder_cls.__module__  # so that the actual packaged builder can be imported
 
         def __reduce__(self):  # to make dynamically created class pickable, see _InitializeParameterizedDatasetBuilder
-            parent_builder_cls = self.__class__.__mro__[1]
+            parent_builder_cls = builder_cls
             return (
                 _InitializeConfiguredDatasetBuilder(),
                 (
@@ -142,29 +143,45 @@ def configure_builder_class(
                 self.__dict__.copy(),
             )
 
-    ConfiguredDatasetBuilder.__name__ = (
-        f"{builder_cls.__name__.lower().capitalize()}{snakecase_to_camelcase(dataset_name)}"
-    )
-    ConfiguredDatasetBuilder.__qualname__ = (
-        f"{builder_cls.__name__.lower().capitalize()}{snakecase_to_camelcase(dataset_name)}"
-    )
+    # compute the generated name once to avoid repeated work
+    _generated_suffix = snakecase_to_camelcase(dataset_name)
+    _generated_prefix = builder_cls.__name__.lower().capitalize()
+    _generated_name = f"{_generated_prefix}{_generated_suffix}"
+
+    ConfiguredDatasetBuilder.__name__ = _generated_name
+    ConfiguredDatasetBuilder.__qualname__ = _generated_name
+
 
     return ConfiguredDatasetBuilder
 
 
 def import_main_class(module_path) -> Optional[type[DatasetBuilder]]:
     """Import a module at module_path and return its main class: a DatasetBuilder"""
-    module = importlib.import_module(module_path)
+    # Avoid re-importing if already loaded
+    module = sys.modules.get(module_path)
+    if module is None:
+        module = importlib.import_module(module_path)
+
+    # Find the main class in our imported module
     # Find the main class in our imported module
     module_main_cls = None
-    for name, obj in module.__dict__.items():
-        if inspect.isclass(obj) and issubclass(obj, DatasetBuilder):
-            if inspect.isabstract(obj):
-                continue
-            module_main_cls = obj
-            obj_module = inspect.getmodule(obj)
-            if obj_module is not None and module == obj_module:
-                break
+    mod_name = getattr(module, "__name__", None)
+    DB = DatasetBuilder
+    is_class = inspect.isclass
+    is_abs = inspect.isabstract
+
+    # iterate over values to avoid unused name lookups; use __module__ comparison instead of inspect.getmodule
+    for obj in vars(module).values():
+        if not is_class(obj):
+            continue
+        if not issubclass(obj, DB):
+            continue
+        if is_abs(obj):
+            continue
+        module_main_cls = obj
+        if getattr(obj, "__module__", None) == mod_name:
+            break
+
 
     return module_main_cls
 
