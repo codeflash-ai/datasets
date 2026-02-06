@@ -342,22 +342,27 @@ def format_kwargs_for_fingerprint(
     Format the kwargs of a transform to the format that will be used to update the fingerprint.
     """
     kwargs_for_fingerprint = kwargs.copy()
+    sig = inspect.signature(func)
+    params_values = list(sig.parameters.values())
+
     if args:
-        params = [p.name for p in inspect.signature(func).parameters.values() if p != p.VAR_KEYWORD]
+        params = [p.name for p in params_values if p != p.VAR_KEYWORD]
         args = args[1:]  # assume the first argument is the dataset
         params = params[1:]
         kwargs_for_fingerprint.update(zip(params, args))
     else:
         del kwargs_for_fingerprint[
-            next(iter(inspect.signature(func).parameters))
+            next(iter(sig.parameters))
         ]  # assume the first key is the dataset
 
     # keep the right kwargs to be hashed to generate the fingerprint
 
     if use_kwargs:
-        kwargs_for_fingerprint = {k: v for k, v in kwargs_for_fingerprint.items() if k in use_kwargs}
+        use_set = set(use_kwargs)
+        kwargs_for_fingerprint = {k: v for k, v in kwargs_for_fingerprint.items() if k in use_set}
     if ignore_kwargs:
-        kwargs_for_fingerprint = {k: v for k, v in kwargs_for_fingerprint.items() if k not in ignore_kwargs}
+        ignore_set = set(ignore_kwargs)
+        kwargs_for_fingerprint = {k: v for k, v in kwargs_for_fingerprint.items() if k not in ignore_set}
     if randomized_function:  # randomized functions have `seed` and `generator` parameters
         if kwargs_for_fingerprint.get("seed") is None and kwargs_for_fingerprint.get("generator") is None:
             _, seed, pos, *_ = np.random.get_state()
@@ -366,12 +371,12 @@ def format_kwargs_for_fingerprint(
 
     # remove kwargs that are the default values
 
-    default_values = {
-        p.name: p.default for p in inspect.signature(func).parameters.values() if p.default != inspect._empty
-    }
-    for default_varname, default_value in default_values.items():
-        if default_varname in kwargs_for_fingerprint and kwargs_for_fingerprint[default_varname] == default_value:
-            kwargs_for_fingerprint.pop(default_varname)
+    for p in params_values:
+        if p.default != inspect._empty:
+            default_varname = p.name
+            default_value = p.default
+            if default_varname in kwargs_for_fingerprint and kwargs_for_fingerprint[default_varname] == default_value:
+                kwargs_for_fingerprint.pop(default_varname)
     return kwargs_for_fingerprint
 
 
