@@ -80,7 +80,11 @@ def is_local_path(url_or_filename: str) -> bool:
     # On unix the scheme of a local path is empty (for both absolute and relative),
     # while on windows the scheme is the drive name (ex: "c") for absolute paths.
     # for details on the windows behavior, see https://bugs.python.org/issue42215
-    return urlparse(url_or_filename).scheme == "" or os.path.ismount(urlparse(url_or_filename).scheme + ":/")
+    # Fast-path: most local unix paths won't contain a colon, so avoid urlparse overhead.
+    if isinstance(url_or_filename, str) and ":" not in url_or_filename:
+        return True
+    p = urlparse(url_or_filename)
+    return p.scheme == "" or os.path.ismount(p.scheme + ":/")
 
 
 def is_relative_path(url_or_filename: str) -> bool:
