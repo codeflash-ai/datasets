@@ -885,10 +885,8 @@ class PandasArrayExtensionArray(PandasExtensionArray):
 
         """
         if dtype == np.dtype(object):
-            out = np.empty(len(self._data), dtype=object)
-            for i in range(len(self._data)):
-                out[i] = self._data[i]
-            return out
+            # Build a 1-D object array efficiently in C without a per-element Python loop.
+            return np.fromiter(self._data, dtype=object, count=len(self._data))
         if dtype is None:
             return self._data
         else:
