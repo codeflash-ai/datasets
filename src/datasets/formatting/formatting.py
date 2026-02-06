@@ -548,19 +548,26 @@ def _check_valid_column_key(key: str, columns: list[str]) -> None:
 
 def _check_valid_index_key(key: Union[int, slice, range, Iterable], size: int) -> None:
     if isinstance(key, int):
-        if (key < 0 and key + size < 0) or (key >= size):
+        if key >= size or key < -size:
             raise IndexError(f"Invalid key: {key} is out of bounds for size {size}")
         return
     elif isinstance(key, slice):
         pass
     elif isinstance(key, range):
         if len(key) > 0:
-            _check_valid_index_key(max(key), size=size)
-            _check_valid_index_key(min(key), size=size)
+            n = len(key)
+            first = key.start
+            last = first + (n - 1) * key.step
+            max_val = last if last >= first else first
+            min_val = first if last >= first else last
+            _check_valid_index_key(max_val, size=size)
+            _check_valid_index_key(min_val, size=size)
     elif isinstance(key, Iterable):
         if len(key) > 0:
-            _check_valid_index_key(int(max(key)), size=size)
-            _check_valid_index_key(int(min(key)), size=size)
+            max_val = max(key)
+            min_val = min(key)
+            _check_valid_index_key(int(max_val), size=size)
+            _check_valid_index_key(int(min_val), size=size)
     else:
         _raise_bad_key_type(key)
 
