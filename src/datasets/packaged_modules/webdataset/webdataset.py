@@ -13,6 +13,8 @@ from datasets.builder import Key
 from datasets.features.features import cast_to_python_objects
 from datasets.utils.file_utils import SINGLE_FILE_COMPRESSION_EXTENSION_TO_PROTOCOL, xbasename
 
+_BASE_EXT_RE = re.compile(r"^((?:.*/|)[^.]+)[.]([^/]*)$")
+
 
 logger = datasets.utils.logging.get_logger(__name__)
 
@@ -136,7 +138,7 @@ def base_plus_ext(path):
 
     Returns base, allext.
     """
-    match = re.match(r"^((?:.*/|)[^.]+)[.]([^/]*)$", path)
+    match = _BASE_EXT_RE.match(path)
     if not match:
         return None, None
     return match.group(1), match.group(2)
