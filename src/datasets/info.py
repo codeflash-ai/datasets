@@ -47,6 +47,7 @@ from .splits import SplitDict
 from .utils import Version
 from .utils.logging import get_logger
 from .utils.py_utils import asdict, unique_values
+from urllib.parse import urlparse
 
 
 logger = get_logger(__name__)
@@ -270,12 +271,26 @@ class DatasetInfo:
         ```
         """
         fs: fsspec.AbstractFileSystem
-        fs, *_ = url_to_fs(dataset_info_dir, **(storage_options or {}))
         logger.debug(f"Loading Dataset info from {dataset_info_dir}")
         if not dataset_info_dir:
             raise ValueError("Calling DatasetInfo.from_directory() with undefined dataset_info_dir.")
-        with fs.open(posixpath.join(dataset_info_dir, config.DATASET_INFO_FILENAME), "r", encoding="utf-8") as f:
-            dataset_info_dict = json.load(f)
+
+        # Detect remote vs local to avoid the overhead of url_to_fs and fsspec.open for local paths.
+        parsed = urlparse(dataset_info_dir)
+        # Match the behavior of is_remote_url: remote if there is a scheme and it's not a mount (Windows drive)
+        is_remote = parsed.scheme != "" and not os.path.ismount(parsed.scheme + ":/")
+
+        if not is_remote:
+            # Local filesystem: use built-in open which is faster than fsspec for local files.
+            local_path = os.path.join(dataset_info_dir, config.DATASET_INFO_FILENAME)
+            with open(local_path, "r", encoding="utf-8") as f:
+                dataset_info_dict = json.load(f)
+        else:
+            # Remote filesystem: delegate to fsspec as before.
+            fs, *_ = url_to_fs(dataset_info_dir, **(storage_options or {}))
+            with fs.open(posixpath.join(dataset_info_dir, config.DATASET_INFO_FILENAME), "r", encoding="utf-8") as f:
+                dataset_info_dict = json.load(f)
+
         return cls.from_dict(dataset_info_dict)
 
     @classmethod
