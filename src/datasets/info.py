@@ -294,7 +294,17 @@ class DatasetInfo:
         )
 
     def copy(self) -> "DatasetInfo":
-        return self.__class__(**{k: copy.deepcopy(v) for k, v in self.__dict__.items()})
+        copied_dict = {}
+        for k, v in self.__dict__.items():
+            if v is None or isinstance(v, (str, int, bool)):
+                copied_dict[k] = v
+            elif isinstance(v, dict):
+                copied_dict[k] = v.copy()
+            elif hasattr(v, 'copy'):
+                copied_dict[k] = v.copy()
+            else:
+                copied_dict[k] = copy.deepcopy(v)
+        return self.__class__(**copied_dict)
 
     def _to_yaml_dict(self) -> dict:
         yaml_dict = {}
