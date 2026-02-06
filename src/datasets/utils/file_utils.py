@@ -101,7 +101,9 @@ def url_or_path_join(base_name: str, *pathnames: str) -> str:
 
 
 def url_or_path_parent(url_or_path: str) -> str:
-    if is_remote_url(url_or_path):
+    p = urlparse(url_or_path)
+    scheme = p.scheme
+    if scheme != "" and not os.path.ismount(scheme + ":/"):
         return url_or_path[: url_or_path.rindex("/")]
     else:
         return os.path.dirname(url_or_path)
@@ -1386,6 +1388,11 @@ class ArchiveIterable(TrackedIterableFromGenerator):
     @classmethod
     def from_urlpath(cls, urlpath_or_buf, download_config: Optional[DownloadConfig] = None) -> "ArchiveIterable":
         return cls(cls._iter_from_urlpath, urlpath_or_buf, download_config)
+# aiohttp is not available; synthesize an exception type
+# that will never be raised by any actual code for use in the `except`
+# clause only.
+class _AiohttpClientError(Exception):
+    pass
 
 
 class FilesIterable(TrackedIterableFromGenerator):
