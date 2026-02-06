@@ -14,6 +14,7 @@
 
 # Lint as: python3
 """This class handle features definition in datasets and some utilities to display table type."""
+from __future__ import annotations
 
 import copy
 import json
@@ -46,6 +47,8 @@ from .nifti import Nifti, encode_nibabel_image
 from .pdf import Pdf, encode_pdfplumber_pdf
 from .translation import Translation, TranslationVariableLanguages
 from .video import Video
+
+_FEATURE_FIELDS_CACHE: dict[type, frozenset[str]] = {}
 
 
 logger = logging.get_logger(__name__)
@@ -1489,8 +1492,18 @@ def generate_from_dict(obj: Any):
         feature = obj.pop("feature")
         return Sequence(feature=generate_from_dict(feature), **obj)
 
-    field_names = {f.name for f in fields(class_type)}
-    return class_type(**{k: v for k, v in obj.items() if k in field_names})
+    # Use cached field names for performance
+    field_names = _FEATURE_FIELDS_CACHE.get(class_type)
+    if field_names is None:
+        field_names = frozenset(f.name for f in fields(class_type))
+        _FEATURE_FIELDS_CACHE[class_type] = field_names
+
+    # Build kwargs only from recognized dataclass fields
+    kwargs = {}
+    for k, v in obj.items():
+        if k in field_names:
+            kwargs[k] = v
+    return class_type(**kwargs)
 
 
 def generate_from_arrow_type(pa_type: pa.DataType) -> FeatureType:
