@@ -499,7 +499,23 @@ def map_nested(
 
     if num_proc is None:
         num_proc = 1
-    if any(isinstance(v, types) and len(v) > len(iterable) for v in iterable):
+
+    # Bind locals for speed in hot loops
+    _single = _single_map_nested
+    _hf_tqdm = hf_tqdm
+    _iter_batched = iter_batched
+    _parallel_map = parallel_map
+    local_types = types
+
+    # Replace any(...) generator with an explicit loop to avoid generator overhead
+    larger_substruct_found = False
+    # Only check when iterable is a sequence we can iterate through
+    for v in iterable:
+        if isinstance(v, local_types) and len(v) > len(iterable):
+            larger_substruct_found = True
+            break
+
+    if larger_substruct_found:
         mapped = [
             map_nested(
                 function=function,
@@ -508,19 +524,35 @@ def map_nested(
                 parallel_min_length=parallel_min_length,
                 batched=batched,
                 batch_size=batch_size,
-                types=types,
+                types=local_types,
             )
             for obj in iterable
         ]
-    elif num_proc != -1 and num_proc <= 1 or len(iterable) < parallel_min_length:
+    elif num_proc != -1 and (num_proc <= 1 or len(iterable) < parallel_min_length):
+        # Local batch_size variable to avoid mutating input argument unexpectedly
+        eff_batch_size = batch_size
         if batched:
-            if batch_size is None or batch_size <= 0:
-                batch_size = max(len(iterable) // num_proc + int(len(iterable) % num_proc > 0), 1)
-            iterable = list(iter_batched(iterable, batch_size))
-        mapped = [
-            _single_map_nested((function, obj, batched, batch_size, types, None, True, None))
-            for obj in hf_tqdm(iterable, disable=disable_tqdm, desc=desc)
-        ]
+            if eff_batch_size is None or eff_batch_size <= 0:
+                # Follow original behavior: compute a reasonable batch size based on num_proc
+                # num_proc is guaranteed to be an int here
+                eff_batch_size = max(len(iterable) // num_proc + int(len(iterable) % num_proc > 0), 1)
+            iterable_to_map = list(_iter_batched(iterable, eff_batch_size))
+        else:
+            iterable_to_map = iterable
+
+        # Avoid constructing a tqdm wrapper when progress bars are disabled
+        if disable_tqdm:
+            mapped_list = []
+            append = mapped_list.append
+            for obj in iterable_to_map:
+                append(_single((function, obj, batched, eff_batch_size, local_types, None, True, None)))
+            mapped = mapped_list
+        else:
+            mapped = [
+                _single((function, obj, batched, eff_batch_size, local_types, None, True, None))
+                for obj in _hf_tqdm(iterable_to_map, disable=disable_tqdm, desc=desc)
+            ]
+
         if batched:
             mapped = [mapped_item for mapped_batch in mapped for mapped_item in mapped_batch]
     else:
@@ -530,12 +562,15 @@ def map_nested(
                 message=".* is experimental and might be subject to breaking changes in the future\\.$",
                 category=UserWarning,
             )
+            eff_batch_size = batch_size
             if batched:
-                if batch_size is None or batch_size <= 0:
-                    batch_size = len(iterable) // num_proc + int(len(iterable) % num_proc > 0)
-                iterable = list(iter_batched(iterable, batch_size))
-            mapped = parallel_map(
-                function, iterable, num_proc, batched, batch_size, types, disable_tqdm, desc, _single_map_nested
+                if eff_batch_size is None or eff_batch_size <= 0:
+                    eff_batch_size = len(iterable) // num_proc + int(len(iterable) % num_proc > 0)
+                iterable_to_map = list(_iter_batched(iterable, eff_batch_size))
+            else:
+                iterable_to_map = iterable
+            mapped = _parallel_map(
+                function, iterable_to_map, num_proc, batched, eff_batch_size, local_types, disable_tqdm, desc, _single
             )
             if batched:
                 mapped = [mapped_item for mapped_batch in mapped for mapped_item in mapped_batch]
