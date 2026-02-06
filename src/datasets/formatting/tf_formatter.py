@@ -33,64 +33,117 @@ class TFFormatter(TensorFormatter[Mapping, "tf.Tensor", Mapping]):
     def __init__(self, features=None, token_per_repo_id=None, **tf_tensor_kwargs):
         super().__init__(features=features, token_per_repo_id=token_per_repo_id)
         self.tf_tensor_kwargs = tf_tensor_kwargs
-        import tensorflow as tf  # noqa: F401 - import tf at initialization
+
+
+        # Cached modules / classes to avoid repeated imports and lookups
+        self._tf = None
+        self._pil_image_cls = None
+        self._video_reader_cls = None
+        self._torchcodec_audio_video_classes = None
+        self._torch_module = None
 
     def _consolidate(self, column):
-        import tensorflow as tf
+        # match original behavior: import tf at top so ImportError behavior is preserved
+        tf = self._get_tf()
 
-        if isinstance(column, list) and column:
-            if all(
-                isinstance(x, tf.Tensor) and x.shape == column[0].shape and x.dtype == column[0].dtype for x in column
-            ):
-                return tf.stack(column)
-            elif all(
-                isinstance(x, (tf.Tensor, tf.RaggedTensor)) and x.ndim == 1 and x.dtype == column[0].dtype
-                for x in column
-            ):
+        # Fast path checks and caching of first element attributes
+        if column and isinstance(column, list):
+            first = column[0]
+            # check for identical tensors (shape & dtype)
+            try:
+                first_shape = first.shape
+                first_dtype = first.dtype
+            except Exception:
+                first_shape = None
+                first_dtype = None
+
+            if first_shape is not None and first_dtype is not None:
+                all_same = True
+                for x in column:
+                    if not (isinstance(x, tf.Tensor) and x.shape == first_shape and x.dtype == first_dtype):
+                        all_same = False
+                        break
+                if all_same:
+                    return tf.stack(column)
+
                 # only rag 1-D tensors, otherwise some dimensions become ragged even though they were consolidated
-                return tf.ragged.stack(column)
+                all_ragged_1d = True
+                for x in column:
+                    if not (
+                        isinstance(x, (tf.Tensor, tf.RaggedTensor))
+                        and getattr(x, "ndim", None) == 1
+                        and getattr(x, "dtype", None) == first_dtype
+                    ):
+                        all_ragged_1d = False
+                        break
+                if all_ragged_1d:
+                    return tf.ragged.stack(column)
+
 
         return column
 
     def _tensorize(self, value):
-        import tensorflow as tf
+        # match original behavior: import tf at top so ImportError behavior is preserved
+        tf = self._get_tf()
+
 
         if value is None:
             return value
 
-        default_dtype = {}
+        # determine default dtype only when applicable
+        default_dtype = None  # use None to avoid small dict allocation when not needed
 
-        if isinstance(value, (np.number, np.ndarray)) and np.issubdtype(value.dtype, np.integer):
-            default_dtype = {"dtype": tf.int64}
-        elif isinstance(value, (np.number, np.ndarray)) and np.issubdtype(value.dtype, np.floating):
-            default_dtype = {"dtype": tf.float32}
+        if isinstance(value, (np.number, np.ndarray)):
+            # safe to access .dtype for numpy scalar and ndarray
+            try:
+                if np.issubdtype(value.dtype, np.integer):
+                    default_dtype = {"dtype": tf.int64}
+                elif np.issubdtype(value.dtype, np.floating):
+                    default_dtype = {"dtype": tf.float32}
+            except Exception:
+                default_dtype = None
 
-        if config.PIL_AVAILABLE and "PIL" in sys.modules:
-            import PIL.Image
-
-            if isinstance(value, PIL.Image.Image):
+        # PIL image handling: only if PIL module already loaded and available
+        pil_cls = self._get_pil_image_cls()
+        if pil_cls is not None:
+            # import performed in _get_pil_image_cls to keep semantics
+            if isinstance(value, pil_cls):
                 value = np.asarray(value)
-        if config.TORCHVISION_AVAILABLE and "torchvision" in sys.modules:
-            from torchvision.io import VideoReader
 
-            if isinstance(value, VideoReader):
+        # torchvision VideoReader handling: only if torchvision already loaded
+        video_reader_cls = self._get_video_reader_cls()
+        if video_reader_cls is not None:
+            if isinstance(value, video_reader_cls):
                 return value  # TODO(QL): set output to tf tensors ?
-        if config.TORCHCODEC_AVAILABLE and "torchcodec" in sys.modules:
-            from torchcodec.decoders import AudioDecoder, VideoDecoder
 
-            if isinstance(value, (VideoDecoder, AudioDecoder)):
+        # torchcodec handling: only if torchcodec already loaded
+        tc_classes = self._get_torchcodec_classes()
+        if tc_classes is not None:
+            if isinstance(value, tc_classes):
                 return value  # TODO(QL): set output to jax arrays ?
 
-        return tf.convert_to_tensor(value, **{**default_dtype, **self.tf_tensor_kwargs})
+        # Avoid creating a new dict when not necessary
+        if default_dtype is None:
+            if self.tf_tensor_kwargs:
+                return tf.convert_to_tensor(value, **self.tf_tensor_kwargs)
+            else:
+                return tf.convert_to_tensor(value)
+        else:
+            # need to merge default dtype with provided kwargs
+            combined = dict(default_dtype)
+            if self.tf_tensor_kwargs:
+                combined.update(self.tf_tensor_kwargs)
+            return tf.convert_to_tensor(value, **combined)
 
     def _recursive_tensorize(self, data_struct):
-        import tensorflow as tf
+        # match original behavior: import tf at top so ImportError behavior is preserved
+        tf = self._get_tf()
 
         # support for torch, tf, jax etc.
-        if config.TORCH_AVAILABLE and "torch" in sys.modules:
-            import torch
-
-            if isinstance(data_struct, torch.Tensor):
+        torch_mod = self._get_torch()
+        if torch_mod is not None:
+            if isinstance(data_struct, torch_mod.Tensor):
+                # preserve original conversion semantics
                 return self._tensorize(data_struct.detach().cpu().numpy()[()])
         if hasattr(data_struct, "__array__") and not isinstance(data_struct, tf.Tensor):
             data_struct = data_struct.__array__()
@@ -124,3 +177,42 @@ class TFFormatter(TensorFormatter[Mapping, "tf.Tensor", Mapping]):
         for column_name in batch:
             batch[column_name] = self._consolidate(batch[column_name])
         return batch
+
+    def _get_tf(self):
+        if self._tf is None:
+            import tensorflow as tf
+            self._tf = tf
+        return self._tf
+
+    def _get_pil_image_cls(self):
+        # Preserve original behavior: only import PIL.Image if PIL is already in sys.modules and config allows it
+        if not (config.PIL_AVAILABLE and "PIL" in sys.modules):
+            return None
+        if self._pil_image_cls is None:
+            import PIL.Image
+            self._pil_image_cls = PIL.Image.Image
+        return self._pil_image_cls
+
+    def _get_video_reader_cls(self):
+        if not (config.TORCHVISION_AVAILABLE and "torchvision" in sys.modules):
+            return None
+        if self._video_reader_cls is None:
+            from torchvision.io import VideoReader
+            self._video_reader_cls = VideoReader
+        return self._video_reader_cls
+
+    def _get_torchcodec_classes(self):
+        if not (config.TORCHCODEC_AVAILABLE and "torchcodec" in sys.modules):
+            return None
+        if self._torchcodec_audio_video_classes is None:
+            from torchcodec.decoders import AudioDecoder, VideoDecoder
+            self._torchcodec_audio_video_classes = (VideoDecoder, AudioDecoder)
+        return self._torchcodec_audio_video_classes
+
+    def _get_torch(self):
+        if not (config.TORCH_AVAILABLE and "torch" in sys.modules):
+            return None
+        if self._torch_module is None:
+            import torch
+            self._torch_module = torch
+        return self._torch_module
