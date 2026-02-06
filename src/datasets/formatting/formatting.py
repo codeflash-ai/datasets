@@ -566,12 +566,14 @@ def _check_valid_index_key(key: Union[int, slice, range, Iterable], size: int) -
 
 
 def key_to_query_type(key: Union[int, slice, range, str, Iterable]) -> str:
-    if isinstance(key, numbers.Integral):
+    if isinstance(key, int):
         return "row"
     elif isinstance(key, str):
         return "column"
     elif isinstance(key, (slice, range, Iterable)):
         return "batch"
+    elif isinstance(key, numbers.Integral):
+        return "row"
     _raise_bad_key_type(key)
 
 
