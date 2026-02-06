@@ -475,26 +475,22 @@ class NumpyMultiprocessingGenerator:
         num_samples = len(indices)
         # We distribute the batches so that reading from the workers in round-robin order yields the exact
         # order specified in indices. This is only important when shuffle is False, but we do it regardless.
-        incomplete_batch_cutoff = num_samples - (num_samples % batch_size)
-        indices, last_incomplete_batch = np.split(indices, [incomplete_batch_cutoff])
+        num_full_batches = num_samples // batch_size
+        if num_full_batches == 0:
+            full_batches = np.empty((0, batch_size), dtype=indices.dtype)
+        else:
+            full_part = indices[: num_full_batches * batch_size]
+            full_batches = full_part.reshape(num_full_batches, batch_size)
+
+        last_incomplete_batch = indices[num_full_batches * batch_size :]
         if drop_remainder or len(last_incomplete_batch) == 0:
             last_incomplete_batch = None
 
-        indices = indices.reshape(-1, batch_size)
-        num_batches = len(indices)
-        final_batches_cutoff = num_batches - (num_batches % num_workers)
-        indices, final_batches = np.split(indices, [final_batches_cutoff])
-        indices = indices.reshape(-1, num_workers, batch_size)
+        per_worker_indices = [full_batches[i::num_workers] for i in range(num_workers)]
 
-        per_worker_indices = np.split(indices, indices.shape[1], axis=1)
-        per_worker_indices = [np.squeeze(worker_indices, 1) for worker_indices in per_worker_indices]
-        # Distribute the final batches to the first workers
-        for i in range(len(final_batches)):
-            # len(final_batches) can be zero, and is always less than num_workers
-            per_worker_indices[i] = np.concatenate([per_worker_indices[i], final_batches[i].reshape(1, -1)], axis=0)
         # Add the last incomplete batch to the next worker, which might be the first worker
         if last_incomplete_batch is not None:
-            incomplete_batch_worker_idx = len(final_batches)
+            incomplete_batch_worker_idx = num_full_batches % num_workers
         else:
             incomplete_batch_worker_idx = None
         return per_worker_indices, last_incomplete_batch, incomplete_batch_worker_idx
