@@ -272,14 +272,37 @@ class FolderBasedBuilder(datasets.GeneratorBasedBuilder):
     def _split_files_and_metadata_and_archives(self, data_files):
         files, metadata_files, archives = [], [], []
         metadata_filenames = self.config.metadata_filenames or self.METADATA_FILENAMES
+        metadata_set = set(metadata_filenames)
+
         for data_file in data_files:
-            data_file_root, data_file_ext = os.path.splitext(data_file)
-            _, second_data_file_ext = os.path.splitext(data_file_root)
-            if data_file_ext.lower() in self.EXTENSIONS or second_data_file_ext.lower() in self.EXTENSIONS:
+            # Use basename and rfind to avoid two splitext calls while preserving
+            # the same semantics for leading dots (e.g., '.bashrc') as os.path.splitext.
+            name = os.path.basename(data_file)
+
+            # Find last extension (mimic os.path.splitext behavior)
+            i = name.rfind(".")
+            if i <= 0:
+                data_file_ext = ""
+                root_before_last = name
+            else:
+                data_file_ext = name[i:]
+                root_before_last = name[:i]
+
+            # Find second-to-last extension
+            j = root_before_last.rfind(".")
+            if j <= 0:
+                second_data_file_ext = ""
+            else:
+                second_data_file_ext = root_before_last[j:]
+
+            data_file_ext_lower = data_file_ext.lower()
+            second_data_file_ext_lower = second_data_file_ext.lower()
+
+            if data_file_ext_lower in self.EXTENSIONS or second_data_file_ext_lower in self.EXTENSIONS:
                 files.append(data_file)
-            elif os.path.basename(data_file) in metadata_filenames:
+            elif name in metadata_set:
                 metadata_files.append(data_file)
-            elif data_file_ext.lower() == ".zip":
+            elif data_file_ext_lower == ".zip":
                 archives.append(data_file)
         return files, metadata_files, archives
 
