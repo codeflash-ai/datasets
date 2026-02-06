@@ -73,7 +73,13 @@ RATE_LIMIT_CODE = 429
 
 
 def is_remote_url(url_or_filename: str) -> bool:
-    return urlparse(url_or_filename).scheme != "" and not os.path.ismount(urlparse(url_or_filename).scheme + ":/")
+    parsed = urlparse(url_or_filename)
+    scheme = parsed.scheme
+    if not scheme:
+        return False
+    if scheme in ('http', 'https', 'ftp', 'ftps', 's3', 'gs', 'hdfs'):
+        return True
+    return not os.path.ismount(scheme + ":/")
 
 
 def is_local_path(url_or_filename: str) -> bool:
