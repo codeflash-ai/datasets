@@ -117,14 +117,44 @@ class IndexedTableMixin:
         """
         if not len(indices):
             raise ValueError("Indices must be non-empty")
-        batch_indices = np.searchsorted(self._offsets, indices, side="right") - 1
-        return pa.Table.from_batches(
-            [
-                self._batches[batch_idx].slice(i - self._offsets[batch_idx], 1)
-                for batch_idx, i in zip(batch_indices, indices)
-            ],
-            schema=self._schema,
-        )
+        # Ensure we have an ndarray for vectorized operations (does not mutate the original input)
+        idx_arr = np.asarray(indices)
+        batch_indices = np.searchsorted(self._offsets, idx_arr, side="right") - 1
+        # positions inside corresponding batches
+        positions = idx_arr - self._offsets[batch_indices]
+
+        # Group consecutive indices that are in the same batch and contiguous within that batch
+        batches: list[pa.RecordBatch] = []
+        n = len(idx_arr)
+        # Initialize first run
+        run_batch = int(batch_indices[0])
+        run_start_pos = int(positions[0])
+        run_len = 1
+
+        for k in range(1, n):
+            bidx = int(batch_indices[k])
+            pos = int(positions[k])
+            # extend run if same batch and contiguous position
+            if bidx == run_batch and pos == run_start_pos + run_len:
+                run_len += 1
+            else:
+                # flush current run
+                if run_len == 1:
+                    batches.append(self._batches[run_batch].slice(run_start_pos, 1))
+                else:
+                    batches.append(self._batches[run_batch].slice(run_start_pos, run_len))
+                # start new run
+                run_batch = bidx
+                run_start_pos = pos
+                run_len = 1
+
+        # flush last run
+        if run_len == 1:
+            batches.append(self._batches[run_batch].slice(run_start_pos, 1))
+        else:
+            batches.append(self._batches[run_batch].slice(run_start_pos, run_len))
+
+        return pa.Table.from_batches(batches, schema=self._schema)
 
     def fast_slice(self, offset=0, length=None) -> pa.Table:
         """
@@ -141,13 +171,28 @@ class IndexedTableMixin:
         i = _interpolation_search(self._offsets, offset)
         if length is None or length + offset >= self._offsets[-1]:
             batches = self._batches[i:]
-            batches[0] = batches[0].slice(offset - self._offsets[i])
+            # Only slice the first batch if we actually need to skip some rows
+            start_in_first = offset - self._offsets[i]
+            if start_in_first != 0:
+                batches[0] = batches[0].slice(start_in_first)
+            return pa.Table.from_batches(batches, schema=self._schema)
         else:
             j = _interpolation_search(self._offsets, offset + length - 1)
+            # If the requested range lies within a single batch, return one slice
+            if i == j:
+                start_in_batch = offset - self._offsets[i]
+                return pa.Table.from_batches([self._batches[i].slice(start_in_batch, length)], schema=self._schema)
+            # Otherwise, take batches from i to j inclusive, slicing first and last only when necessary
             batches = self._batches[i : j + 1]
-            batches[-1] = batches[-1].slice(0, offset + length - self._offsets[j])
-            batches[0] = batches[0].slice(offset - self._offsets[i])
-        return pa.Table.from_batches(batches, schema=self._schema)
+            # slice last batch only if we don't need the entire batch
+            end_in_last = offset + length - self._offsets[j]
+            last_batch_len = len(self._batches[j])
+            if end_in_last != last_batch_len:
+                batches[-1] = batches[-1].slice(0, end_in_last)
+            start_in_first = offset - self._offsets[i]
+            if start_in_first != 0:
+                batches[0] = batches[0].slice(start_in_first)
+            return pa.Table.from_batches(batches, schema=self._schema)
 
 
 class Table(IndexedTableMixin):
