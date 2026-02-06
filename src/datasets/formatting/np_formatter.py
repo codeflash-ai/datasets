@@ -30,10 +30,33 @@ class NumpyFormatter(TensorFormatter[Mapping, np.ndarray, Mapping]):
 
     def _consolidate(self, column):
         if isinstance(column, list):
-            if column and all(
-                isinstance(x, np.ndarray) and x.shape == column[0].shape and x.dtype == column[0].dtype for x in column
-            ):
-                return np.stack(column)
+            # Fast-path: empty list -> empty object array (preserve original behavior)
+            if not column:
+                out = np.empty(0, dtype=object)
+                out[:] = column
+                return out
+
+            first = column[0]
+            # Only stack when every element is an ndarray with the same shape and dtype.
+            if isinstance(first, np.ndarray):
+                first_shape = first.shape
+                first_dtype = first.dtype
+                # Check remaining elements with a simple for-loop to avoid generator overhead.
+                for x in column[1:]:
+                    if not isinstance(x, np.ndarray) or x.shape != first_shape or x.dtype != first_dtype:
+                        # don't use np.array(column, dtype=object)
+                        # since it fails in certain cases
+                        # see https://stackoverflow.com/q/51005699
+                        out = np.empty(len(column), dtype=object)
+                        out[:] = column
+                        return out
+                # All elements are ndarray with identical shape/dtype -> create stacked array.
+                # np.asarray is implemented in C and will efficiently create the desired array.
+                try:
+                    return np.asarray(column, dtype=first_dtype)
+                except Exception:
+                    # Fallback to np.stack if asarray fails for some reason.
+                    return np.stack(column)
             else:
                 # don't use np.array(column, dtype=object)
                 # since it fails in certain cases
