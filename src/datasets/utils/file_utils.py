@@ -23,7 +23,7 @@ from itertools import chain
 from pathlib import Path, PurePosixPath
 from typing import Any, Optional, TypeVar, Union
 from unittest.mock import patch
-from urllib.parse import urlparse
+from urllib.parse import urlsplit, urlparse
 from xml.etree import ElementTree as ET
 
 import fsspec
@@ -84,7 +84,11 @@ def is_local_path(url_or_filename: str) -> bool:
 
 
 def is_relative_path(url_or_filename: str) -> bool:
-    return urlparse(url_or_filename).scheme == "" and not os.path.isabs(url_or_filename)
+    s = url_or_filename
+    # Fast-path: if there's no ':' there's no scheme, so just check absolute path
+    if isinstance(s, str) and ":" not in s:
+        return not os.path.isabs(s)
+    return urlsplit(s).scheme == "" and not os.path.isabs(s)
 
 
 def relative_to_absolute_path(path: T) -> T:
