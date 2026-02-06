@@ -237,19 +237,25 @@ class PythonFeaturesDecoder:
 class PandasFeaturesDecoder:
     def __init__(self, features: Optional[Features]):
         self.features = features
-
-    def decode_row(self, row: pd.DataFrame) -> pd.DataFrame:
-        decode = (
-            {
+        # Precompute decoders for columns that require decoding to avoid rebuilding them on every call.
+        # This preserves behavior while reducing overhead when decode_row is called repeatedly.
+        if self.features:
+            # Build mapping of column -> callable only once
+            self._decoders = {
                 column_name: no_op_if_value_is_null(partial(decode_nested_example, feature))
                 for column_name, feature in self.features.items()
                 if self.features._column_requires_decoding[column_name]
             }
-            if self.features
-            else {}
-        )
+        else:
+            self._decoders = {}
+
+    def decode_row(self, row: pd.DataFrame) -> pd.DataFrame:
+        decode = self._decoders if self.features else {}
         if decode:
-            row[list(decode.keys())] = row.transform(decode)
+            # Apply each decoder to its column with Series.map to reduce pandas-level transform overhead.
+            for col, fn in decode.items():
+                # Preserve same assignment semantics as original implementation
+                row[col] = row[col].map(fn)
         return row
 
     def decode_column(self, column: pd.Series, column_name: str) -> pd.Series:
