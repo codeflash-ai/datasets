@@ -970,6 +970,8 @@ class PandasArrayExtensionArray(PandasExtensionArray):
     def __eq__(self, other) -> np.ndarray:
         if not isinstance(other, PandasArrayExtensionArray):
             raise NotImplementedError(f"Invalid type to compare to: {type(other)}")
+        if self is other:
+            return np.bool_(True)
         return (self._data == other._data).all()
 
 
