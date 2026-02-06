@@ -901,13 +901,25 @@ class PandasArrayExtensionArray(PandasExtensionArray):
     def _from_sequence(
         cls, scalars, dtype: Optional[PandasArrayExtensionDtype] = None, copy: bool = False
     ) -> "PandasArrayExtensionArray":
-        if len(scalars) > 1 and all(
-            isinstance(x, np.ndarray) and x.shape == scalars[0].shape and x.dtype == scalars[0].dtype for x in scalars
-        ):
-            data = np.array(scalars, dtype=dtype if dtype is None else dtype.value_type, copy=copy)
-        else:
-            data = np.empty(len(scalars), dtype=object)
-            data[:] = scalars
+        if len(scalars) > 1:
+            # Fast path: check if all elements are numpy arrays with same shape and dtype.
+            first = scalars[0]
+            if isinstance(first, np.ndarray):
+                first_shape = first.shape
+                first_dtype = first.dtype
+                all_same = True
+                for x in scalars:
+                    if not isinstance(x, np.ndarray) or x.shape != first_shape or x.dtype != first_dtype:
+                        all_same = False
+                        break
+                if all_same:
+                    data = np.array(scalars, dtype=dtype if dtype is None else dtype.value_type, copy=copy)
+                    return cls(data, copy=copy)
+
+        # Fallback: create an object-dtype array containing the scalars.
+        # Note: preserve original copy semantics by not passing `copy` to np.array here;
+        # the constructor will perform the copy when requested.
+        data = np.array(scalars, dtype=object)
         return cls(data, copy=copy)
 
     @classmethod
