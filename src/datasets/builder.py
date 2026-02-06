@@ -79,10 +79,13 @@ from .utils.py_utils import (
 )
 from .utils.sharding import _number_of_shards_in_gen_kwargs, _split_gen_kwargs
 from .utils.track import tracked_list
+import sys
 
 
 if TYPE_CHECKING:
     from .load import DatasetModule
+
+_MODULE_DIR_CACHE = {}
 
 
 logger = logging.get_logger(__name__)
@@ -675,7 +678,23 @@ class DatasetBuilder:
     @classmethod
     def get_imported_module_dir(cls):
         """Return the path of the module of this class or subclass."""
-        return os.path.dirname(inspect.getfile(inspect.getmodule(cls)))
+        module_name = cls.__module__
+        cached = _MODULE_DIR_CACHE.get(module_name)
+        if cached is not None:
+            return cached
+
+        module = sys.modules.get(module_name)
+        if module is None:
+            module = inspect.getmodule(cls)
+
+        try:
+            module_file = module.__file__
+        except Exception:
+            module_file = inspect.getfile(module)
+
+        dirpath = os.path.dirname(module_file)
+        _MODULE_DIR_CACHE[module_name] = dirpath
+        return dirpath
 
     def _rename(self, src: str, dst: str):
         rename(self._fs, src, dst)
