@@ -63,6 +63,7 @@ class DatasetGenerationCastError(DatasetGenerationError):
             f"\n\nAll the data files must have the same columns, but at some point {cast_error.details()}"
         )
         formatted_tracked_gen_kwargs: list[str] = []
+        fs = None
         for gen_kwarg in gen_kwargs.values():
             if not isinstance(gen_kwarg, (tracked_str, tracked_list, TrackedIterableFromGenerator)):
                 continue
@@ -73,7 +74,9 @@ class DatasetGenerationCastError(DatasetGenerationError):
             if isinstance(gen_kwarg, tracked_str):
                 gen_kwarg = gen_kwarg.get_origin()
             if isinstance(gen_kwarg, str) and gen_kwarg.startswith("hf://"):
-                resolved_path = HfFileSystem(endpoint=config.HF_ENDPOINT, token=token).resolve_path(gen_kwarg)
+                if fs is None:
+                    fs = HfFileSystem(endpoint=config.HF_ENDPOINT, token=token)
+                resolved_path = fs.resolve_path(gen_kwarg)
                 gen_kwarg = "hf://" + resolved_path.unresolve()
                 if "@" + resolved_path.revision in gen_kwarg:
                     gen_kwarg = (

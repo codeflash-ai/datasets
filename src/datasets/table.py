@@ -2158,6 +2158,14 @@ class CastError(ValueError):
         super().__init__(*args)
         self.table_column_names = table_column_names
         self.requested_column_names = requested_column_names
+        new_columns = set(table_column_names) - set(requested_column_names)
+        missing_columns = set(requested_column_names) - set(table_column_names)
+        if new_columns and missing_columns:
+            self._details_str = f"there are {len(new_columns)} new columns ({_short_str(new_columns)}) and {len(missing_columns)} missing columns ({_short_str(missing_columns)})."
+        elif new_columns:
+            self._details_str = f"there are {len(new_columns)} new columns ({_short_str(new_columns)})"
+        else:
+            self._details_str = f"there are {len(missing_columns)} missing columns ({_short_str(missing_columns)})"
 
     def __reduce__(self):
         # Fix unpickling: TypeError: __init__() missing 2 required keyword-only arguments: 'table_column_names' and 'requested_column_names'
@@ -2166,14 +2174,7 @@ class CastError(ValueError):
         ), ()
 
     def details(self):
-        new_columns = set(self.table_column_names) - set(self.requested_column_names)
-        missing_columns = set(self.requested_column_names) - set(self.table_column_names)
-        if new_columns and missing_columns:
-            return f"there are {len(new_columns)} new columns ({_short_str(new_columns)}) and {len(missing_columns)} missing columns ({_short_str(missing_columns)})."
-        elif new_columns:
-            return f"there are {len(new_columns)} new columns ({_short_str(new_columns)})"
-        else:
-            return f"there are {len(missing_columns)} missing columns ({_short_str(missing_columns)})"
+        return self._details_str
 
 
 def cast_table_to_features(table: pa.Table, features: "Features"):
