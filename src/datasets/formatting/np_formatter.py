@@ -30,33 +30,49 @@ class NumpyFormatter(TensorFormatter[Mapping, np.ndarray, Mapping]):
 
     def _consolidate(self, column):
         if isinstance(column, list):
-            if column and all(
-                isinstance(x, np.ndarray) and x.shape == column[0].shape and x.dtype == column[0].dtype for x in column
-            ):
-                return np.stack(column)
-            else:
-                # don't use np.array(column, dtype=object)
-                # since it fails in certain cases
-                # see https://stackoverflow.com/q/51005699
-                out = np.empty(len(column), dtype=object)
-                out[:] = column
-                return out
+            # Fast path: check if all entries are ndarray with same shape and dtype.
+            # Use an explicit loop and locals to avoid generator and repeated attribute lookups.
+            if column:
+                first = column[0]
+                if isinstance(first, np.ndarray):
+                    first_shape = first.shape
+                    first_dtype = first.dtype
+                    all_same = True
+                    for x in column:
+                        if not isinstance(x, np.ndarray) or x.shape != first_shape or x.dtype != first_dtype:
+                            all_same = False
+                            break
+                    if all_same:
+                        return np.stack(column)
+            # Fallback: create an object-dtype array and assign elements
+            out = np.empty(len(column), dtype=object)
+            out[:] = column
+            return out
         return column
 
     def _tensorize(self, value):
         if isinstance(value, (str, bytes, type(None))):
             return value
-        elif isinstance(value, (np.character, np.ndarray)) and np.issubdtype(value.dtype, np.character):
+
+        # Handle numpy character arrays and numpy scalars early.
+        if isinstance(value, np.ndarray):
+            dtype = value.dtype
+            if np.issubdtype(dtype, np.character):
+                return value
+            if np.issubdtype(dtype, np.integer):
+                default_dtype = {"dtype": np.int64}
+            elif np.issubdtype(dtype, np.floating):
+                default_dtype = {"dtype": np.float32}
+            else:
+                default_dtype = {}
+        elif isinstance(value, np.character):
+            # numpy character scalar (rare)
             return value
         elif isinstance(value, np.number):
             return value
+        else:
+            default_dtype = {}
 
-        default_dtype = {}
-
-        if isinstance(value, np.ndarray) and np.issubdtype(value.dtype, np.integer):
-            default_dtype = {"dtype": np.int64}
-        elif isinstance(value, np.ndarray) and np.issubdtype(value.dtype, np.floating):
-            default_dtype = {"dtype": np.float32}
 
         if config.PIL_AVAILABLE and "PIL" in sys.modules:
             import PIL.Image
@@ -74,7 +90,9 @@ class NumpyFormatter(TensorFormatter[Mapping, np.ndarray, Mapping]):
             if isinstance(value, (VideoDecoder, AudioDecoder)):
                 return value  # TODO(QL): set output to np arrays ?
 
-        return np.asarray(value, **{**default_dtype, **self.np_array_kwargs})
+        # Merge default dtype with provided kwargs; default_dtype may be empty.
+        merged_kwargs = {**default_dtype, **self.np_array_kwargs}
+        return np.asarray(value, **merged_kwargs)
 
     def _recursive_tensorize(self, data_struct):
         # support for torch, tf, jax etc.
@@ -88,9 +106,10 @@ class NumpyFormatter(TensorFormatter[Mapping, np.ndarray, Mapping]):
         # support for nested types like struct of list of struct
         if isinstance(data_struct, np.ndarray):
             if data_struct.dtype == object:
-                return self._consolidate([self.recursive_tensorize(substruct) for substruct in data_struct])
+                # Use internal recursive helper to avoid extra map_nested overhead.
+                return self._consolidate([self._recursive_tensorize(substruct) for substruct in data_struct])
         if isinstance(data_struct, (list, tuple)):
-            return self._consolidate([self.recursive_tensorize(substruct) for substruct in data_struct])
+            return self._consolidate([self._recursive_tensorize(substruct) for substruct in data_struct])
         return self._tensorize(data_struct)
 
     def recursive_tensorize(self, data_struct: dict):
