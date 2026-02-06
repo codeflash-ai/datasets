@@ -176,8 +176,7 @@ def is_caching_enabled() -> bool:
     - caching doesn't affect [`~datasets.load_dataset`]. If you want to regenerate a dataset from scratch you should use
     the `download_mode` parameter in [`~datasets.load_dataset`].
     """
-    global _CACHING_ENABLED
-    return bool(_CACHING_ENABLED)
+    return _CACHING_ENABLED
 
 
 def get_temporary_cache_files_directory() -> str:
