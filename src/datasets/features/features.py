@@ -47,6 +47,10 @@ from .pdf import Pdf, encode_pdfplumber_pdf
 from .translation import Translation, TranslationVariableLanguages
 from .video import Video
 
+_storage_dtype_cache: dict = {}
+
+_pandas_dtype_cache: dict = {}
+
 
 logger = logging.get_logger(__name__)
 
@@ -696,7 +700,13 @@ class _ArrayXDExtensionType(pa.ExtensionType):
                 raise ValueError(f"Support only dynamic size on first dimension. Got: {shape}")
         self.shape = tuple(shape)
         self.value_type = dtype
-        self.storage_dtype = self._generate_dtype(self.value_type)
+        cache_key = (self.__class__, self.shape, self.value_type)
+        storage_dtype = _storage_dtype_cache.get(cache_key)
+        if storage_dtype is None:
+            storage_dtype = self._generate_dtype(self.value_type)
+            _storage_dtype_cache[cache_key] = storage_dtype
+        self.storage_dtype = storage_dtype
+
         pa.ExtensionType.__init__(self, self.storage_dtype, f"{self.__class__.__module__}.{self.__class__.__name__}")
 
     def __arrow_ext_serialize__(self):
@@ -975,7 +985,12 @@ class PandasArrayExtensionArray(PandasExtensionArray):
 
 def pandas_types_mapper(dtype):
     if isinstance(dtype, _ArrayXDExtensionType):
-        return PandasArrayExtensionDtype(dtype.value_type)
+        val = dtype.value_type
+        cached = _pandas_dtype_cache.get(val)
+        if cached is None:
+            cached = PandasArrayExtensionDtype(val)
+            _pandas_dtype_cache[val] = cached
+        return cached
 
 
 @dataclass
