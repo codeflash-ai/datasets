@@ -12,6 +12,8 @@ from datasets.builder import Key
 from datasets.table import table_cast
 from datasets.utils.file_utils import readline
 
+_PYARROW: str = "pyarrow"
+
 
 logger = datasets.utils.logging.get_logger(__name__)
 
@@ -34,7 +36,7 @@ def ujson_loads(*args, **kwargs):
 
 def pandas_read_json(path_or_buf, **kwargs):
     if datasets.config.PANDAS_VERSION.major >= 2:
-        kwargs["dtype_backend"] = "pyarrow"
+        kwargs["dtype_backend"] = _PYARROW
     return pd.read_json(path_or_buf, **kwargs)
 
 
