@@ -12,6 +12,7 @@ import datasets
 from datasets.builder import Key
 from datasets.features.features import cast_to_python_objects
 from datasets.utils.file_utils import SINGLE_FILE_COMPRESSION_EXTENSION_TO_PROTOCOL, xbasename
+import ast
 
 
 logger = datasets.utils.logging.get_logger(__name__)
@@ -295,10 +296,82 @@ def msgpack_loads(data: bytes):
 
 
 def npy_loads(data: bytes):
-    import numpy.lib.format
 
-    stream = io.BytesIO(data)
-    return numpy.lib.format.read_array(stream, allow_pickle=False)
+    mv = memoryview(data)
+
+    if len(mv) < 10:
+        raise ValueError("Invalid .npy file")
+
+    if mv[:6].tobytes() != b'\x93NUMPY':
+        raise ValueError("Invalid file: not a NumPy .npy file")
+
+    ver_major = mv[6]
+    ver_minor = mv[7]
+
+    if ver_major == 1:
+        if len(mv) < 10:
+            raise ValueError("Truncated header")
+        header_len = int.from_bytes(mv[8:10], 'little')
+        header_start = 10
+    elif ver_major in (2, 3):
+        if len(mv) < 12:
+            raise ValueError("Truncated header")
+        header_len = int.from_bytes(mv[8:12], 'little')
+        header_start = 12
+    else:
+        raise ValueError(f"Unknown .npy file version: {ver_major}.{ver_minor}")
+
+    header_end = header_start + header_len
+    if header_end > len(mv):
+        raise ValueError("Truncated header")
+
+    header_str = mv[header_start:header_end].tobytes().decode('latin1')
+    try:
+        header = ast.literal_eval(header_str)
+    except Exception as exc:
+        raise ValueError("Failed to parse header") from exc
+
+    try:
+        descr = header['descr']
+        fortran_order = header['fortran_order']
+        shape = header['shape']
+    except KeyError as exc:
+        raise ValueError("Malformed header: missing keys") from exc
+
+    dtype = np.dtype(descr)
+
+    if dtype.hasobject:
+        raise ValueError("Object arrays cannot be loaded when allow_pickle=False")
+
+    if isinstance(shape, int):
+        shape_tuple = (shape,)
+    else:
+        shape_tuple = tuple(shape)
+
+    count = 1
+    for dim in shape_tuple:
+        count *= int(dim)
+
+    itemsize = dtype.itemsize
+    data_start = header_end
+    data_nbytes = count * itemsize
+
+    if data_start + data_nbytes > len(mv):
+        raise ValueError("File ended before all array data could be read")
+
+    buf = mv[data_start:data_start + data_nbytes]
+
+    arr = np.frombuffer(buf, dtype=dtype)
+
+    if shape_tuple == ():
+        arr = arr.reshape(())
+    else:
+        if fortran_order:
+            arr = arr.reshape(shape_tuple, order='F')
+        else:
+            arr = arr.reshape(shape_tuple, order='C')
+
+    return arr
 
 
 def npz_loads(data: bytes):
