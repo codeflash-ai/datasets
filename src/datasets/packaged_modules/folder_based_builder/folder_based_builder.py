@@ -438,9 +438,10 @@ def _nested_apply(item: Any, feature_path: _VisitPath, func: Callable[[Any, _Vis
     item = func(item, feature_path)
     if feature_path:
         key = feature_path[0]
+        tail = feature_path[1:]
         if key == 0:
-            for i in range(len(item)):
-                item[i] = _nested_apply(item[i], feature_path[1:], func)
+            for i, v in enumerate(item):
+                item[i] = _nested_apply(v, tail, func)
         else:
-            item[key] = _nested_apply(item[key], feature_path[1:], func)
+            item[key] = _nested_apply(item[key], tail, func)
     return item
