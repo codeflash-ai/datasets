@@ -21,10 +21,8 @@ if TYPE_CHECKING:
 
 def pdf_to_bytes(pdf: "pdfplumber.pdf.PDF") -> bytes:
     """Convert a pdfplumber.pdf.PDF object to bytes."""
-    with BytesIO() as buffer:
-        for page in pdf.pages:
-            buffer.write(page.pdf.stream)
-        return buffer.getvalue()
+    streams = [page.pdf.stream for page in pdf.pages]
+    return b"".join(streams)
 
 
 @dataclass
