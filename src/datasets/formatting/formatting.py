@@ -63,16 +63,18 @@ def _query_table_with_indices_mapping(
         key = range(*key.indices(indices.num_rows))
     if isinstance(key, range):
         if _is_range_contiguous(key) and key.start >= 0:
-            return _query_table(
-                table, [i.as_py() for i in indices.fast_slice(key.start, key.stop - key.start).column(0)]
-            )
+            indices_col = indices.fast_slice(key.start, key.stop - key.start).column(0)
+            indices_array = np.array(indices_col.to_pylist(), dtype=np.int64)
+            return _query_table(table, indices_array)
         else:
             pass  # treat as an iterable
     if isinstance(key, str):
         table = table.select([key])
         return _query_table(table, indices.column(0).to_pylist())
     if isinstance(key, Iterable):
-        return _query_table(table, [indices.fast_slice(i, 1).column(0)[0].as_py() for i in key])
+        indices_col = indices.column(0)
+        mapped_indices = np.array([indices_col[i].as_py() for i in key], dtype=np.int64)
+        return _query_table(table, mapped_indices)
 
     _raise_bad_key_type(key)
 
