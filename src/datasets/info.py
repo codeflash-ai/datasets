@@ -312,13 +312,27 @@ class DatasetInfo:
 
     @classmethod
     def _from_yaml_dict(cls, yaml_data: dict) -> "DatasetInfo":
-        yaml_data = copy.deepcopy(yaml_data)
+        # Build a new dict instead of deepcopy-ing the whole input to avoid mutating the caller's data
+        # while avoiding the cost of a full deepcopy.
+        data: dict = {}
+
+        # Transform features and splits if present (these helper functions handle their own copying)
         if yaml_data.get("features") is not None:
-            yaml_data["features"] = Features._from_yaml_list(yaml_data["features"])
+            data["features"] = Features._from_yaml_list(yaml_data["features"])
         if yaml_data.get("splits") is not None:
-            yaml_data["splits"] = SplitDict._from_yaml_list(yaml_data["splits"])
-        field_names = {f.name for f in dataclasses.fields(cls)}
-        return cls(**{k: v for k, v in yaml_data.items() if k in field_names})
+            data["splits"] = SplitDict._from_yaml_list(yaml_data["splits"])
+
+        # Cache the dataclass field names on the class to avoid repeated reflection overhead
+        if not hasattr(cls, "_field_names_cache"):
+            cls._field_names_cache = {f.name for f in dataclasses.fields(cls)}
+        field_names = cls._field_names_cache
+
+        # Copy the other allowed fields from the original mapping without mutating it
+        for k, v in yaml_data.items():
+            if k in field_names and k not in ("features", "splits"):
+                data[k] = v
+
+        return cls(**data)
 
 
 class DatasetInfosDict(dict[str, DatasetInfo]):
@@ -372,16 +386,16 @@ class DatasetInfosDict(dict[str, DatasetInfo]):
 
     @classmethod
     def from_dataset_card_data(cls, dataset_card_data: DatasetCardData) -> "DatasetInfosDict":
-        if isinstance(dataset_card_data.get("dataset_info"), (list, dict)):
-            if isinstance(dataset_card_data["dataset_info"], list):
-                return cls(
-                    {
-                        dataset_info_yaml_dict.get("config_name", "default"): DatasetInfo._from_yaml_dict(
-                            dataset_info_yaml_dict
-                        )
-                        for dataset_info_yaml_dict in dataset_card_data["dataset_info"]
-                    }
-                )
+        dataset_info_obj = dataset_card_data.get("dataset_info")
+        if isinstance(dataset_info_obj, (list, dict)):
+            if isinstance(dataset_info_obj, list):
+                result: dict = {}
+                _from = DatasetInfo._from_yaml_dict
+                # Use an explicit loop with local lookups to reduce attribute access overhead
+                for dataset_info_yaml_dict in dataset_info_obj:
+                    key = dataset_info_yaml_dict.get("config_name", "default")
+                    result[key] = _from(dataset_info_yaml_dict)
+                return cls(result)
             else:
                 dataset_info = DatasetInfo._from_yaml_dict(dataset_card_data["dataset_info"])
                 dataset_info.config_name = dataset_card_data["dataset_info"].get("config_name", "default")
