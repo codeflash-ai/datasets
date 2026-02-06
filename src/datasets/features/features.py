@@ -786,40 +786,56 @@ class ArrayExtensionArray(pa.ExtensionArray):
         storage: pa.ListArray = self.storage
         null_mask = storage.is_null().to_numpy(zero_copy_only=False)
 
-        if self.type.shape[0] is not None:
-            size = 1
-            null_indices = np.arange(len(storage))[null_mask] - np.arange(np.sum(null_mask))
 
-            for i in range(self.type.ndims):
-                size *= self.type.shape[i]
+        # capture original length before any flattening mutates `storage`
+        orig_len = len(storage)
+
+        if self.type.shape[0] is not None:
+            # compute null insertion indices efficiently
+            null_pos = np.flatnonzero(null_mask)
+            num_nulls = null_pos.size
+            if num_nulls:
+                null_indices = null_pos - np.arange(num_nulls)
+            else:
+                null_indices = np.empty(0, dtype=int)
+
+            ndims = self.type.ndims
+            for _ in range(ndims):
                 storage = storage.flatten()
             numpy_arr = storage.to_numpy(zero_copy_only=zero_copy_only)
-            numpy_arr = numpy_arr.reshape(len(self) - len(null_indices), *self.type.shape)
+            numpy_arr = numpy_arr.reshape(orig_len - num_nulls, *self.type.shape)
 
-            if len(null_indices):
-                numpy_arr = np.insert(numpy_arr.astype(np.float64), null_indices, np.nan, axis=0)
+            if num_nulls:
+                # preallocate final float64 array filled with NaN and assign non-null rows
+                out = np.full((orig_len, *self.type.shape), np.nan, dtype=np.float64)
+                out[~null_mask] = numpy_arr
+                numpy_arr = out
+
 
         else:
             shape = self.type.shape
             ndims = self.type.ndims
-            arrays = []
-            first_dim_offsets = np.array([off.as_py() for off in storage.offsets])
-            for i, is_null in enumerate(null_mask):
-                if is_null:
-                    arrays.append(np.nan)
+            arrays = [None] * orig_len
+            # faster conversion of offsets to numpy
+            first_dim_offsets = storage.offsets.to_numpy(zero_copy_only=False)
+            for i in range(orig_len):
+                if null_mask[i]:
+                    arrays[i] = np.nan
                 else:
                     storage_el = storage[i : i + 1]
-                    first_dim = first_dim_offsets[i + 1] - first_dim_offsets[i]
+                    first_dim = int(first_dim_offsets[i + 1] - first_dim_offsets[i])
+                    # flatten storage_el ndims times
                     # flatten storage
                     for _ in range(ndims):
                         storage_el = storage_el.flatten()
 
-                    numpy_arr = storage_el.to_numpy(zero_copy_only=zero_copy_only)
-                    arrays.append(numpy_arr.reshape(first_dim, *shape[1:]))
+                    numpy_arr_el = storage_el.to_numpy(zero_copy_only=zero_copy_only)
+                    arrays[i] = numpy_arr_el.reshape(first_dim, *shape[1:])
 
-            if len(np.unique(np.diff(first_dim_offsets))) > 1:
+            diffs = np.diff(first_dim_offsets)
+            if diffs.size > 0 and diffs.max() != diffs.min():
                 # ragged
-                numpy_arr = np.empty(len(arrays), dtype=object)
+                numpy_arr = np.empty(orig_len, dtype=object)
                 numpy_arr[:] = arrays
             else:
                 numpy_arr = np.array(arrays)
