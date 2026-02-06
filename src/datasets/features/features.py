@@ -916,10 +916,47 @@ class PandasArrayExtensionArray(PandasExtensionArray):
             va._data.shape == to_concat[0]._data.shape and va._data.dtype == to_concat[0]._data.dtype
             for va in to_concat
         ):
-            data = np.vstack([va._data for va in to_concat])
+            # All arrays have the same shape and dtype. Use a single pre-allocated array
+            # and copy blocks into it to avoid creating intermediate Python lists or
+            # intermediate concatenation objects.
+            first = to_concat[0]._data
+            dtype = first.dtype
+            shape0 = first.shape
+            # Handle 0-D and 1-D arrays similarly to np.vstack behavior: they become rows.
+            # For arrays with ndim <= 1, vstack produces an array of shape (k, n) where
+            # n is the length of the 1-D array or 1 for scalars (0-D).
+            if first.ndim <= 1:
+                # Determine number of columns: 1 for scalars (0-D), else length of 1-D
+                if first.ndim == 0:
+                    cols = 1
+                    out_shape = (len(to_concat), cols)
+                    out = np.empty(out_shape, dtype=dtype)
+                    for i, va in enumerate(to_concat):
+                        # va._data is 0-D; assign into (i, 0)
+                        out[i, 0] = va._data
+                else:
+                    cols = shape0[0]
+                    out_shape = (len(to_concat), cols)
+                    out = np.empty(out_shape, dtype=dtype)
+                    for i, va in enumerate(to_concat):
+                        out[i] = va._data
+            else:
+                # For ndim >= 2, vstack concatenates along axis 0, so resulting first
+                # dimension is the sum of all first-dim sizes.
+                rows = sum(va._data.shape[0] for va in to_concat)
+                out_shape = (rows,) + shape0[1:]
+                out = np.empty(out_shape, dtype=dtype)
+                offset = 0
+                for va in to_concat:
+                    block = va._data
+                    nrows = block.shape[0]
+                    out[offset : offset + nrows] = block
+                    offset += nrows
+            data = out
         else:
             data = np.empty(len(to_concat), dtype=object)
-            data[:] = [va._data for va in to_concat]
+            for i, va in enumerate(to_concat):
+                data[i] = va._data
         return cls(data, copy=False)
 
     @property
