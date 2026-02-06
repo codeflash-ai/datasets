@@ -871,7 +871,7 @@ class PandasArrayExtensionDtype(PandasExtensionDtype):
 
 class PandasArrayExtensionArray(PandasExtensionArray):
     def __init__(self, data: np.ndarray, copy: bool = False):
-        self._data = data if not copy else np.array(data)
+        self._data = data.copy() if copy else data
         self._dtype = PandasArrayExtensionDtype(data.dtype)
 
     def __array__(self, dtype=None):
