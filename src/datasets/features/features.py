@@ -954,14 +954,14 @@ class PandasArrayExtensionArray(PandasExtensionArray):
                 raise ValueError("Invalid value in `indices`, must be all >= -1 for `allow_fill` is True")
             elif len(self) > 0:
                 pass
-            elif not np.all(mask):
+            elif not mask.all():
                 raise IndexError("Invalid take for empty PandasArrayExtensionArray, must be all -1.")
             else:
-                data = np.array([fill_value] * len(indices), dtype=self.dtype.value_type)
+                data = np.full(len(indices), fill_value, dtype=self.dtype.value_type)
                 return PandasArrayExtensionArray(data, copy=False)
         took = self._data.take(indices, axis=0)
         if allow_fill and mask.any():
-            took[mask] = [fill_value] * np.sum(mask)
+            took[mask] = fill_value
         return PandasArrayExtensionArray(took, copy=False)
 
     def __len__(self) -> int:
