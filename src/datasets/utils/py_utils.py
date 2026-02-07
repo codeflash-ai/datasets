@@ -42,11 +42,9 @@ from ..parallel import parallel_map
 from . import logging
 from . import tqdm as hf_tqdm
 from ._dill import (  # noqa: F401 # imported for backward compatibility. TODO: remove in 3.0.0
-    Pickler,
-    dump,
-    dumps,
-    pklregister,
-)
+    Pickler, dump, dumps, pklregister)
+
+_IMMUTABLE_PRIMITIVES = (str, bytes, int, float, bool, type(None), complex)
 
 
 try:  # pragma: no branch
@@ -221,6 +219,9 @@ def asdict(obj):
         elif isinstance(obj, dict):
             return {_asdict_inner(k): _asdict_inner(v) for k, v in obj.items()}
         else:
+            # Avoid an expensive deepcopy for common immutable primitives.
+            if isinstance(obj, _IMMUTABLE_PRIMITIVES):
+                return obj
             return copy.deepcopy(obj)
 
     if not isinstance(obj, dict) and not _is_dataclass_instance(obj):

@@ -576,9 +576,12 @@ class SplitDict(dict[str, SplitInfo]):
         """Returns a list of SplitInfo protos that we have."""
         out = []
         for split_name, split_info in self.items():
-            split_info = copy.deepcopy(split_info)
-            split_info.name = split_name
-            out.append(split_info)
+            new_split_info = dataclasses.replace(split_info, name=split_name)
+            if split_info.shard_lengths is not None:
+                new_split_info.shard_lengths = copy.deepcopy(split_info.shard_lengths)
+            if split_info.original_shard_lengths is not None:
+                new_split_info.original_shard_lengths = copy.deepcopy(split_info.original_shard_lengths)
+            out.append(new_split_info)
         return out
 
     def copy(self):
