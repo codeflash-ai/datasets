@@ -5,8 +5,10 @@ class tracked_str(str):
     origins = {}
 
     def set_origin(self, origin: str):
-        if super().__repr__() not in self.origins:
-            self.origins[super().__repr__()] = origin
+        # Cache repr locally to avoid calling super().__repr__ twice.
+        rep = super().__repr__()
+        if rep not in self.origins:
+            self.origins[rep] = origin
 
     def get_origin(self):
         return self.origins.get(super().__repr__(), str(self))
