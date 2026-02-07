@@ -184,9 +184,29 @@ def _is_inside_unrequested_special_dir(matched_rel_path: str, pattern: str) -> b
     # We just need to check if every special directories from the path is present explicitly in the pattern.
     # Since we assume that the path matches the pattern, it's equivalent to counting that both
     # the parent path and the parent pattern have the same number of special directories.
-    data_dirs_to_ignore_in_path = [part for part in PurePath(matched_rel_path).parent.parts if part.startswith("__")]
-    data_dirs_to_ignore_in_pattern = [part for part in PurePath(pattern).parent.parts if part.startswith("__")]
-    return len(data_dirs_to_ignore_in_path) != len(data_dirs_to_ignore_in_pattern)
+    
+    # Find the last separator to get the parent path
+    last_sep_path = matched_rel_path.rfind('/')
+    parent_path = matched_rel_path[:last_sep_path] if last_sep_path != -1 else ''
+    
+    last_sep_pattern = pattern.rfind('/')
+    parent_pattern = pattern[:last_sep_pattern] if last_sep_pattern != -1 else ''
+    
+    # Count special directories (starting with "__") in parent path
+    count_path = 0
+    if parent_path:
+        for part in parent_path.split('/'):
+            if part.startswith("__"):
+                count_path += 1
+    
+    # Count special directories in parent pattern
+    count_pattern = 0
+    if parent_pattern:
+        for part in parent_pattern.split('/'):
+            if part.startswith("__"):
+                count_pattern += 1
+    
+    return count_path != count_pattern
 
 
 def _is_unrequested_hidden_file_or_is_inside_unrequested_hidden_dir(matched_rel_path: str, pattern: str) -> bool:
