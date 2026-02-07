@@ -418,8 +418,10 @@ def get_from_cache(
 
 
 def add_start_docstrings(*docstr):
-    def docstring_decorator(fn):
-        fn.__doc__ = "".join(docstr) + "\n\n" + (fn.__doc__ if fn.__doc__ is not None else "")
+    prefix = "".join(docstr) + "\n\n"
+
+    def docstring_decorator(fn, _prefix=prefix):
+        fn.__doc__ = _prefix + (fn.__doc__ if fn.__doc__ is not None else "")
         return fn
 
     return docstring_decorator
