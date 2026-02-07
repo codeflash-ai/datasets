@@ -421,7 +421,7 @@ def _pct_to_abs_pct1(boundary, num_examples):
 
 
 def _pct_to_abs_closest(boundary, num_examples):
-    return int(round(boundary * num_examples / 100.0))
+    return int(round(boundary * num_examples * 0.01))
 
 
 def _rel_to_abs_instr(rel_instr, name2len):
