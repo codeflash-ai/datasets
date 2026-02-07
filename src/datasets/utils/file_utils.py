@@ -426,8 +426,10 @@ def add_start_docstrings(*docstr):
 
 
 def add_end_docstrings(*docstr):
+    appended = "\n\n" + "".join(docstr)
+
     def docstring_decorator(fn):
-        fn.__doc__ = (fn.__doc__ if fn.__doc__ is not None else "") + "\n\n" + "".join(docstr)
+        fn.__doc__ = (fn.__doc__ or "") + appended
         return fn
 
     return docstring_decorator
