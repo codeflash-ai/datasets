@@ -84,7 +84,30 @@ def is_local_path(url_or_filename: str) -> bool:
 
 
 def is_relative_path(url_or_filename: str) -> bool:
-    return urlparse(url_or_filename).scheme == "" and not os.path.isabs(url_or_filename)
+    # Faster replacement of urlparse(url).scheme == "" check:
+    #  - If there's no ':' character, there's no scheme -> relative if not abs path
+    #  - If there's a ':' ensure the scheme-like prefix is not a valid scheme (letters, digits, '+', '-', '.')
+    # This replicates urlparse's scheme detection for the common cases and avoids constructing a full ParseResult.
+    s = url_or_filename
+    if not isinstance(s, str):
+        # Fallback to original behavior for non-str input to preserve semantics.
+        return urlparse(s).scheme == "" and not os.path.isabs(s)
+    # Fast check: no colon -> no scheme
+    idx = s.find(":")
+    has_scheme = False
+    if idx != -1:
+        # Check that scheme-like part starts with an ASCII letter and contains only valid scheme chars.
+        first = s[0]
+        if first.isalpha():
+            scheme_part = s[:idx]
+            valid = True
+            for ch in scheme_part:
+                if not (ch.isalnum() or ch in "+-."):
+                    valid = False
+                    break
+            if valid:
+                has_scheme = True
+    return (not has_scheme) and (not os.path.isabs(s))
 
 
 def relative_to_absolute_path(path: T) -> T:
@@ -94,7 +117,10 @@ def relative_to_absolute_path(path: T) -> T:
 
 
 def url_or_path_join(base_name: str, *pathnames: str) -> str:
-    if is_remote_url(base_name):
+    # Use a fast heuristic to detect remote/base URLs: presence of "://"
+    # This avoids the cost of urlparse for the common join path in downloads.
+    if isinstance(base_name, str) and "://" in base_name:
+        # Normalize path separators and strip leading slashes from components.
         return posixpath.join(base_name, *(str(pathname).replace(os.sep, "/").lstrip("/") for pathname in pathnames))
     else:
         return Path(base_name, *pathnames).as_posix()
@@ -162,8 +188,9 @@ def cached_path(
     if isinstance(url_or_filename, Path):
         url_or_filename = str(url_or_filename)
 
-    # Convert fsspec URL in the format "file://local/path" to "local/path"
-    if can_be_local(url_or_filename):
+    # Convert fsspec "file://" forms to local paths with a fast check to avoid expensive can_be_local().
+    if isinstance(url_or_filename, str) and (url_or_filename.startswith("file://") or url_or_filename.startswith("file:")):
+        # strip_protocol handles various file:// variants correctly
         url_or_filename = strip_protocol(url_or_filename)
 
     if is_remote_url(url_or_filename):
