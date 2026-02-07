@@ -326,7 +326,7 @@ class DownloadManager:
         return self.extract(self.download(url_or_urls))
 
     def get_recorded_sizes_checksums(self):
-        return self._recorded_sizes_checksums.copy()
+        return self._recorded_sizes_checksums
 
     def delete_extracted_files(self):
         paths_to_delete = set(self.extracted_paths.values()) - set(self.downloaded_paths.values())
