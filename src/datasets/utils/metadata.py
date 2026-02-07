@@ -34,9 +34,12 @@ class _NoDuplicateSafeLoader(yaml.SafeLoader):
 
 
 def _split_yaml_from_readme(readme_content: str) -> tuple[Optional[str], str]:
-    full_content = list(readme_content.splitlines())
-    if full_content and full_content[0] == "---" and "---" in full_content[1:]:
-        sep_idx = full_content[1:].index("---") + 1
+    full_content = readme_content.splitlines()
+    if full_content and full_content[0] == "---":
+        try:
+            sep_idx = full_content.index("---", 1)
+        except ValueError:
+            return None, "\n".join(full_content)
         yamlblock = "\n".join(full_content[1:sep_idx])
         return yamlblock, "\n".join(full_content[sep_idx + 1 :])
 
