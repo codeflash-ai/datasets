@@ -80,7 +80,8 @@ def is_local_path(url_or_filename: str) -> bool:
     # On unix the scheme of a local path is empty (for both absolute and relative),
     # while on windows the scheme is the drive name (ex: "c") for absolute paths.
     # for details on the windows behavior, see https://bugs.python.org/issue42215
-    return urlparse(url_or_filename).scheme == "" or os.path.ismount(urlparse(url_or_filename).scheme + ":/")
+    p = urlparse(url_or_filename)
+    return p.scheme == "" or os.path.ismount(p.scheme + ":/")
 
 
 def is_relative_path(url_or_filename: str) -> bool:
@@ -665,11 +666,18 @@ def xbasename(a):
         >>> xbasename("zip://folder1/file.txt::https://host.com/archive.zip")
         file.txt
     """
-    a, *b = str(a).split("::")
-    if is_local_path(a):
-        return os.path.basename(Path(a).as_posix())
+    s = str(a)
+    head, _sep, _tail = s.partition("::")
+    if is_local_path(head):
+        if head == "":
+            return os.path.basename(Path(head).as_posix())
+        normalized = head.replace("\\", "/").rstrip("/")
+        idx = normalized.rfind("/")
+        if idx == -1:
+            return normalized
+        return normalized[idx + 1 :]
     else:
-        return posixpath.basename(a)
+        return posixpath.basename(head)
 
 
 def xsplit(a):
