@@ -20,10 +20,23 @@ logger = get_logger(__name__)
 
 class _NoDuplicateSafeLoader(yaml.SafeLoader):
     def _check_no_duplicates_on_constructed_node(self, node):
-        keys = [self.constructed_objects[key_node] for key_node, _ in node.value]
-        keys = [tuple(key) if isinstance(key, list) else key for key in keys]
-        counter = Counter(keys)
-        duplicate_keys = [key for key in counter if counter[key] > 1]
+        seen = {}
+        duplicate_keys = []
+        
+        for key_node, _ in node.value:
+            key = self.constructed_objects[key_node]
+            # Convert list to tuple for hashability
+            if isinstance(key, list):
+                key = tuple(key)
+            
+            # Track duplicates in a single pass
+            if key in seen:
+                if seen[key] == 1:  # First time seeing this as duplicate
+                    duplicate_keys.append(key)
+                seen[key] += 1
+            else:
+                seen[key] = 1
+        
         if duplicate_keys:
             raise TypeError(f"Got duplicate yaml keys: {duplicate_keys}")
 
