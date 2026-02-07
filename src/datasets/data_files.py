@@ -242,13 +242,20 @@ def _is_unrequested_hidden_file_or_is_inside_unrequested_hidden_dir(matched_rel_
     # We just need to check if every hidden part from the path is present explicitly in the pattern.
     # Since we assume that the path matches the pattern, it's equivalent to counting that both
     # the path and the pattern have the same number of hidden parts.
-    hidden_directories_in_path = [
-        part for part in PurePath(matched_rel_path).parts if part.startswith(".") and not set(part) == {"."}
-    ]
-    hidden_directories_in_pattern = [
-        part for part in PurePath(pattern).parts if part.startswith(".") and not set(part) == {"."}
-    ]
-    return len(hidden_directories_in_path) != len(hidden_directories_in_pattern)
+    hidden_directories_in_path = 0
+    for part in PurePath(matched_rel_path).parts:
+        # part.startswith(".") and not set(part) == {"."}
+        # Use part.strip('.') != '' to avoid allocating a set for parts that are only dots.
+        if part.startswith(".") and part.strip(".") != "":
+            hidden_directories_in_path += 1
+
+    hidden_directories_in_pattern = 0
+    for part in PurePath(pattern).parts:
+        # part.startswith(".") and not set(part) == {"."}
+        if part.startswith(".") and part.strip(".") != "":
+            hidden_directories_in_pattern += 1
+
+    return hidden_directories_in_path != hidden_directories_in_pattern
 
 
 def _get_data_files_patterns(pattern_resolver: Callable[[str], list[str]]) -> dict[str, list[str]]:
