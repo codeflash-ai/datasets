@@ -43,6 +43,7 @@ from . import _tqdm, logging
 from ._filelock import FileLock
 from .extract import ExtractManager
 from .track import TrackedIterableFromGenerator
+from functools import lru_cache
 
 
 try:
@@ -275,9 +276,9 @@ def get_datasets_user_agent(user_agent: Optional[Union[str, dict]] = None) -> st
 def get_authentication_headers_for_url(url: str, token: Optional[Union[str, bool]] = None) -> dict:
     """Handle the HF authentication"""
     if url.startswith(config.HF_ENDPOINT):
-        return huggingface_hub.utils.build_hf_headers(
-            token=token, library_name="datasets", library_version=__version__
-        )
+        # Use a small cache to avoid repeated expensive calls to build_hf_headers
+        # Return a shallow copy to avoid exposing the cached dict for mutation.
+        return dict(_cached_build_hf_headers(token))
     else:
         return {}
 
@@ -1418,3 +1419,22 @@ class FilesIterable(TrackedIterableFromGenerator):
     @classmethod
     def from_urlpaths(cls, urlpaths, download_config: Optional[DownloadConfig] = None) -> "FilesIterable":
         return cls(cls._iter_from_urlpaths, urlpaths, download_config)
+
+
+
+@lru_cache(maxsize=128)
+def _cached_build_hf_headers(token: Optional[Union[str, bool]]) -> dict:
+    # Keep the same call to huggingface_hub.utils.build_hf_headers to preserve behavior;
+    # results are cached keyed by token (None/str/bool are hashable).
+    return huggingface_hub.utils.build_hf_headers(
+        token=token, library_name="datasets", library_version=__version__
+    )
+
+
+@lru_cache(maxsize=128)
+def _cached_build_hf_headers(token: Optional[Union[str, bool]]) -> dict:
+    # Keep the same call to huggingface_hub.utils.build_hf_headers to preserve behavior;
+    # results are cached keyed by token (None/str/bool are hashable).
+    return huggingface_hub.utils.build_hf_headers(
+        token=token, library_name="datasets", library_version=__version__
+    )
