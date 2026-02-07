@@ -43,6 +43,7 @@ from . import _tqdm, logging
 from ._filelock import FileLock
 from .extract import ExtractManager
 from .track import TrackedIterableFromGenerator
+import gzip
 
 
 try:
@@ -959,7 +960,7 @@ def xopen(file: str, mode="r", *args, download_config: Optional[DownloadConfig] 
         file object
     """
     # This works as well for `xopen(str(Path(...)))`
-    file_str = _as_str(file)
+    file_str = file if isinstance(file, str) else _as_str(file)
     main_hop, *rest_hops = file_str.split("::")
     if is_local_path(main_hop):
         # ignore fsspec-specific kwargs
@@ -1219,8 +1220,6 @@ def _as_str(path: Union[str, Path, xPath]):
 
 
 def xgzip_open(filepath_or_buffer, *args, download_config: Optional[DownloadConfig] = None, **kwargs):
-    import gzip
-
     if hasattr(filepath_or_buffer, "read"):
         return gzip.open(filepath_or_buffer, *args, **kwargs)
     else:
@@ -1386,6 +1385,11 @@ class ArchiveIterable(TrackedIterableFromGenerator):
     @classmethod
     def from_urlpath(cls, urlpath_or_buf, download_config: Optional[DownloadConfig] = None) -> "ArchiveIterable":
         return cls(cls._iter_from_urlpath, urlpath_or_buf, download_config)
+# aiohttp is not available; synthesize an exception type
+# that will never be raised by any actual code for use in the `except`
+# clause only.
+class _AiohttpClientError(Exception):
+    pass
 
 
 class FilesIterable(TrackedIterableFromGenerator):
