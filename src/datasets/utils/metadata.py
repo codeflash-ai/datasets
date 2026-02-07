@@ -51,8 +51,12 @@ class MetadataConfigs(dict[str, dict[str, Any]]):
     @staticmethod
     def _raise_if_data_files_field_not_valid(metadata_config: dict):
         yaml_data_files = metadata_config.get("data_files")
-        if yaml_data_files is not None:
-            yaml_error_message = textwrap.dedent(
+        if yaml_data_files is None:
+            return
+
+        # Build the error message lazily only when needed
+        def _yaml_error():
+            return textwrap.dedent(
                 f"""
                 Expected data_files in YAML to be either a string or a list of strings
                 or a list of dicts with two keys: 'split' and 'path', but got {yaml_data_files}
@@ -83,21 +87,27 @@ class MetadataConfigs(dict[str, dict[str, Any]]):
                 PS: some symbols like dashes '-' are not allowed in split names
                 """
             )
-            if not isinstance(yaml_data_files, (list, str)):
-                raise ValueError(yaml_error_message)
-            if isinstance(yaml_data_files, list):
-                for yaml_data_files_item in yaml_data_files:
-                    if (
-                        not isinstance(yaml_data_files_item, (str, dict))
-                        or isinstance(yaml_data_files_item, dict)
-                        and not (
-                            len(yaml_data_files_item) == 2
-                            and "split" in yaml_data_files_item
-                            and re.match(_split_re, yaml_data_files_item["split"])
-                            and isinstance(yaml_data_files_item.get("path"), (str, list))
-                        )
-                    ):
-                        raise ValueError(yaml_error_message)
+
+        if not isinstance(yaml_data_files, (list, str)):
+            raise ValueError(_yaml_error())
+
+        if isinstance(yaml_data_files, list):
+            for item in yaml_data_files:
+                # Accept simple string entries
+                if isinstance(item, str):
+                    continue
+                # Must be a dict with exactly two keys (split and path)
+                if not isinstance(item, dict):
+                    raise ValueError(_yaml_error())
+                if len(item) != 2 or "split" not in item:
+                    raise ValueError(_yaml_error())
+                split_value = item["split"]
+                path_value = item.get("path")
+                # Validate split and path types/formats
+                if not (isinstance(split_value, str) and re.match(_split_re, split_value)):
+                    raise ValueError(_yaml_error())
+                if not isinstance(path_value, (str, list)):
+                    raise ValueError(_yaml_error())
 
     @classmethod
     def _from_exported_parquet_files_and_dataset_infos(
@@ -144,6 +154,7 @@ class MetadataConfigs(dict[str, dict[str, Any]]):
             metadata_configs = dataset_card_data[cls.FIELD_NAME]
             if not isinstance(metadata_configs, list):
                 raise ValueError(f"Expected {cls.FIELD_NAME} to be a list, but got '{metadata_configs}'")
+            result: dict[str, dict[str, Any]] = {}
             for metadata_config in metadata_configs:
                 if "config_name" not in metadata_config:
                     raise ValueError(
@@ -151,16 +162,16 @@ class MetadataConfigs(dict[str, dict[str, Any]]):
                         f"but got {metadata_config}. "
                     )
                 cls._raise_if_data_files_field_not_valid(metadata_config)
-            return cls(
-                {
-                    config.pop("config_name"): {
-                        param: value if param != "features" else Features._from_yaml_list(value)
-                        for param, value in config.items()
-                    }
-                    for metadata_config in metadata_configs
-                    if (config := metadata_config.copy())
-                }
-            )
+                config = metadata_config.copy()
+                config_name = config.pop("config_name")
+                params: dict[str, Any] = {}
+                for param, value in config.items():
+                    if param == "features":
+                        params[param] = Features._from_yaml_list(value)
+                    else:
+                        params[param] = value
+                result[config_name] = params
+            return cls(result)
         return cls()
 
     def to_dataset_card_data(self, dataset_card_data: DatasetCardData) -> None:
