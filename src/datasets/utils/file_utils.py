@@ -445,7 +445,7 @@ def readline(f: io.RawIOBase):
         if not b:
             break
         res += b
-        if res.endswith(b"\n"):
+        if b == b"\n":
             break
     return bytes(res)
 
