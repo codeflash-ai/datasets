@@ -306,8 +306,11 @@ def unique_values(values):
 def no_op_if_value_is_null(func):
     """If the value is None, return None, else call `func`."""
 
-    def wrapper(value):
-        return func(value) if value is not None else None
+    def wrapper(value, _f=func):
+        # bind func as a default parameter to avoid a closure cell lookup on each call
+        if value is None:
+            return None
+        return _f(value)
 
     return wrapper
 
