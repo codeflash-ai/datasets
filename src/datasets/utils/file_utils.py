@@ -691,8 +691,16 @@ def xsplit(a):
         >>> xsplit("zip://folder1/file.txt::https://host.com/archive.zip")
         ('zip://folder1::https://host.com/archive.zip', 'file.txt')
     """
-    a, *b = str(a).split("::")
-    if is_local_path(a):
+    # split only on the first occurrence to avoid creating a list of all segments
+    s = str(a)
+    head, sep, rest = s.partition("::")
+    a = head
+    b = [rest] if sep else []
+
+    # Inline the local-path check to avoid an extra function call and duplicate parsing.
+    parsed = urlparse(a)
+    scheme = parsed.scheme
+    if scheme == "" or os.path.ismount(scheme + ":/"):
         return os.path.split(Path(a).as_posix())
     else:
         a, tail = posixpath.split(a)
@@ -1386,6 +1394,11 @@ class ArchiveIterable(TrackedIterableFromGenerator):
     @classmethod
     def from_urlpath(cls, urlpath_or_buf, download_config: Optional[DownloadConfig] = None) -> "ArchiveIterable":
         return cls(cls._iter_from_urlpath, urlpath_or_buf, download_config)
+# aiohttp is not available; synthesize an exception type
+# that will never be raised by any actual code for use in the `except`
+# clause only.
+class _AiohttpClientError(Exception):
+    pass
 
 
 class FilesIterable(TrackedIterableFromGenerator):
