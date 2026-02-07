@@ -431,7 +431,6 @@ def _rel_to_abs_instr(rel_instr, name2len):
         rel_instr: RelativeInstruction instance.
         name2len: dict {split_name: num_examples}.
     """
-    pct_to_abs = _pct_to_abs_closest if rel_instr.rounding == "closest" else _pct_to_abs_pct1
     split = rel_instr.splitname
     if split not in name2len:
         raise ValueError(f'Unknown split "{split}". Should be one of {list(name2len)}.')
@@ -439,6 +438,7 @@ def _rel_to_abs_instr(rel_instr, name2len):
     from_ = rel_instr.from_
     to = rel_instr.to
     if rel_instr.unit == "%":
+        pct_to_abs = _pct_to_abs_closest if rel_instr.rounding == "closest" else _pct_to_abs_pct1
         from_ = 0 if from_ is None else pct_to_abs(from_, num_examples)
         to = num_examples if to is None else pct_to_abs(to, num_examples)
     else:
@@ -446,10 +446,14 @@ def _rel_to_abs_instr(rel_instr, name2len):
         to = num_examples if to is None else to
     if from_ < 0:
         from_ = max(num_examples + from_, 0)
+    elif from_ > num_examples:
+        from_ = num_examples
+    
     if to < 0:
         to = max(num_examples + to, 0)
-    from_ = min(from_, num_examples)
-    to = min(to, num_examples)
+    elif to > num_examples:
+        to = num_examples
+    
     return _AbsoluteInstruction(split, from_, to)
 
 
