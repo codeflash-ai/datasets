@@ -518,8 +518,9 @@ def _get_path_extension(path: str) -> str:
     extension = path.split(".")[-1]
     # Remove query params ("dl=1", "raw=true"): gz?dl=1 -> gz
     # Remove shards infos (".txt_1", ".txt-00000-of-00100"): txt_1 -> txt
-    for symb in "?-_":
-        extension = extension.split(symb)[0]
+    extension = extension.partition("?")[0]
+    extension = extension.partition("-")[0]
+    extension = extension.partition("_")[0]
     return extension
 
 
