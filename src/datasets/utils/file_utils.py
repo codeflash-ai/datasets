@@ -44,6 +44,8 @@ from ._filelock import FileLock
 from .extract import ExtractManager
 from .track import TrackedIterableFromGenerator
 
+_HF_HEADERS_CACHE: dict[str, dict] = {}
+
 
 try:
     from aiohttp.client_exceptions import ClientError as _AiohttpClientError
@@ -275,6 +277,12 @@ def get_datasets_user_agent(user_agent: Optional[Union[str, dict]] = None) -> st
 def get_authentication_headers_for_url(url: str, token: Optional[Union[str, bool]] = None) -> dict:
     """Handle the HF authentication"""
     if url.startswith(config.HF_ENDPOINT):
+        if isinstance(token, str):
+            if token not in _HF_HEADERS_CACHE:
+                _HF_HEADERS_CACHE[token] = huggingface_hub.utils.build_hf_headers(
+                    token=token, library_name="datasets", library_version=__version__
+                )
+            return dict(_HF_HEADERS_CACHE[token])
         return huggingface_hub.utils.build_hf_headers(
             token=token, library_name="datasets", library_version=__version__
         )
