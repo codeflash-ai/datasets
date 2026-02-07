@@ -80,7 +80,8 @@ def is_local_path(url_or_filename: str) -> bool:
     # On unix the scheme of a local path is empty (for both absolute and relative),
     # while on windows the scheme is the drive name (ex: "c") for absolute paths.
     # for details on the windows behavior, see https://bugs.python.org/issue42215
-    return urlparse(url_or_filename).scheme == "" or os.path.ismount(urlparse(url_or_filename).scheme + ":/")
+    parsed = urlparse(url_or_filename)
+    return parsed.scheme == "" or os.path.ismount(parsed.scheme + ":/")
 
 
 def is_relative_path(url_or_filename: str) -> bool:
@@ -1215,6 +1216,8 @@ class xPath(type(Path())):
 
 
 def _as_str(path: Union[str, Path, xPath]):
+    if isinstance(path, str):
+        return path
     return str(path) if isinstance(path, xPath) else str(xPath(str(path)))
 
 
@@ -1386,6 +1389,11 @@ class ArchiveIterable(TrackedIterableFromGenerator):
     @classmethod
     def from_urlpath(cls, urlpath_or_buf, download_config: Optional[DownloadConfig] = None) -> "ArchiveIterable":
         return cls(cls._iter_from_urlpath, urlpath_or_buf, download_config)
+# aiohttp is not available; synthesize an exception type
+# that will never be raised by any actual code for use in the `except`
+# clause only.
+class _AiohttpClientError(Exception):
+    pass
 
 
 class FilesIterable(TrackedIterableFromGenerator):
