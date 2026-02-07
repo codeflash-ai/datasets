@@ -19,7 +19,6 @@ import xml.dom.minidom
 import zipfile
 from collections.abc import Generator
 from io import BytesIO
-from itertools import chain
 from pathlib import Path, PurePosixPath
 from typing import Any, Optional, TypeVar, Union
 from unittest.mock import patch
@@ -503,10 +502,7 @@ MAGIC_NUMBER_TO_COMPRESSION_PROTOCOL = {
 MAGIC_NUMBER_TO_UNSUPPORTED_COMPRESSION_PROTOCOL = {
     b"Rar!": "rar",
 }
-MAGIC_NUMBER_MAX_LENGTH = max(
-    len(magic_number)
-    for magic_number in chain(MAGIC_NUMBER_TO_COMPRESSION_PROTOCOL, MAGIC_NUMBER_TO_UNSUPPORTED_COMPRESSION_PROTOCOL)
-)
+MAGIC_NUMBER_MAX_LENGTH = 6
 
 
 class NonStreamableDatasetError(Exception):
@@ -1386,6 +1382,11 @@ class ArchiveIterable(TrackedIterableFromGenerator):
     @classmethod
     def from_urlpath(cls, urlpath_or_buf, download_config: Optional[DownloadConfig] = None) -> "ArchiveIterable":
         return cls(cls._iter_from_urlpath, urlpath_or_buf, download_config)
+# aiohttp is not available; synthesize an exception type
+# that will never be raised by any actual code for use in the `except`
+# clause only.
+class _AiohttpClientError(Exception):
+    pass
 
 
 class FilesIterable(TrackedIterableFromGenerator):
