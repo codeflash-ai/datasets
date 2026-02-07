@@ -501,7 +501,7 @@ class ReadInstruction:
         """Returns ReadInstruction obj initialized with relative_instructions."""
         # Use __new__ to bypass __init__ used by public API and not conveniant here.
         result = cls.__new__(cls)
-        result._init(relative_instructions)  # pylint: disable=protected-access
+        result._relative_instructions = relative_instructions
         return result
 
     def __init__(self, split_name, rounding=None, from_=None, to=None, unit=None):
