@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 import re
 from functools import partial
@@ -787,14 +788,11 @@ class DataFilesPatternsDict(dict[str, DataFilesPatternsList]):
     ) -> "DataFilesPatternsDict":
         out = cls()
         for key, patterns_for_key in patterns.items():
-            out[key] = (
-                patterns_for_key
-                if isinstance(patterns_for_key, DataFilesPatternsList)
-                else DataFilesPatternsList.from_patterns(
-                    patterns_for_key,
-                    allowed_extensions=allowed_extensions,
-                )
-            )
+            if isinstance(patterns_for_key, DataFilesPatternsList):
+                out[key] = patterns_for_key
+            else:
+                n = len(patterns_for_key)
+                out[key] = DataFilesPatternsList(patterns_for_key, [allowed_extensions] * n)
         return out
 
     def resolve(
