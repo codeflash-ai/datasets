@@ -589,7 +589,11 @@ def _write_generator_to_queue(queue: queue.Queue, func: Callable[..., Iterable[Y
 
 
 def _get_pool_pid(pool: Union[multiprocessing.pool.Pool, multiprocess.pool.Pool]) -> set[int]:
-    return {f.pid for f in pool._pool}
+    _pool = pool._pool
+    pids: set[int] = set()
+    for f in _pool:
+        pids.add(f.pid)
+    return pids
 
 
 def iflatmap_unordered(
