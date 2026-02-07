@@ -210,6 +210,9 @@ def asdict(obj):
                 if not f.init or value != f.default or f.metadata.get("include_in_asdict_even_if_is_default", False):
                     result[f.name] = value
             return result
+        # Fast-path for common immutable built-ins to avoid deepcopy overhead
+        if isinstance(obj, (str, bytes, int, float, bool, type(None), complex)):
+            return obj
         elif isinstance(obj, tuple) and hasattr(obj, "_fields"):
             # obj is a namedtuple
             return type(obj)(*[_asdict_inner(v) for v in obj])
