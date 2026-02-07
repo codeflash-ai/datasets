@@ -48,6 +48,14 @@ from ._dill import (  # noqa: F401 # imported for backward compatibility. TODO: 
     pklregister,
 )
 
+_NAME_LIST = (
+    ("PiB", float(2**50)),
+    ("TiB", float(2**40)),
+    ("GiB", float(2**30)),
+    ("MiB", float(2**20)),
+    ("KiB", float(2**10)),
+)
+
 
 try:  # pragma: no branch
     from typing import Final
@@ -82,8 +90,6 @@ def size_str(size_in_bytes):
     """
     if not size_in_bytes:
         return "Unknown size"
-
-    _NAME_LIST = [("PiB", 2**50), ("TiB", 2**40), ("GiB", 2**30), ("MiB", 2**20), ("KiB", 2**10)]
 
     size_in_bytes = float(size_in_bytes)
     for name, size_bytes in _NAME_LIST:
