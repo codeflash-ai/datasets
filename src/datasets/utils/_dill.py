@@ -23,6 +23,14 @@ from packaging import version
 
 from .. import config
 
+_SUPPORTED_DILL_RELEASES = {
+    version.parse("0.3.6").release,
+    version.parse("0.3.7").release,
+    version.parse("0.3.8").release,
+    version.parse("0.3.9").release,
+    version.parse("0.4.0").release,
+}
+
 
 class Pickler(dill.Pickler):
     dispatch = dill._dill.MetaCatchingDict(dill.Pickler.dispatch.copy())
@@ -98,13 +106,7 @@ def pklregister(t):
 
 def _is_supported_dill_version():
     """Check if the current dill version is in the supported range."""
-    return config.DILL_VERSION.release[:3] in [
-        version.parse("0.3.6").release,
-        version.parse("0.3.7").release,
-        version.parse("0.3.8").release,
-        version.parse("0.3.9").release,
-        version.parse("0.4.0").release,
-    ]
+    return config.DILL_VERSION.release[:3] in _SUPPORTED_DILL_RELEASES
 
 
 def dump(obj, file):
