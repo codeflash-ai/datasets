@@ -16,7 +16,6 @@
 """Arrow ArrowReader."""
 
 import copy
-import math
 import os
 import re
 from dataclasses import dataclass
@@ -417,7 +416,7 @@ def _pct_to_abs_pct1(boundary, num_examples):
             "elements is forbidden: it always results in an empty dataset."
         )
         raise ValueError(msg)
-    return boundary * math.trunc(num_examples / 100.0)
+    return boundary * (num_examples // 100)
 
 
 def _pct_to_abs_closest(boundary, num_examples):
