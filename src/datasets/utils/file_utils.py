@@ -43,6 +43,7 @@ from . import _tqdm, logging
 from ._filelock import FileLock
 from .extract import ExtractManager
 from .track import TrackedIterableFromGenerator
+from functools import lru_cache
 
 
 try:
@@ -910,7 +911,7 @@ def _prepare_single_hop_path_and_storage_options(
         storage_options = {
             option_name: option_value
             for option_name, option_value in download_config.storage_options.items()
-            if option_name not in fsspec.available_protocols()
+            if option_name not in _available_protocols()
         }
     else:
         storage_options = {}
@@ -1418,3 +1419,16 @@ class FilesIterable(TrackedIterableFromGenerator):
     @classmethod
     def from_urlpaths(cls, urlpaths, download_config: Optional[DownloadConfig] = None) -> "FilesIterable":
         return cls(cls._iter_from_urlpaths, urlpaths, download_config)
+
+
+
+@lru_cache(maxsize=1)
+def _available_protocols() -> set[str]:
+    # Cache available protocols to avoid repeated calls in multi-hop urlpaths
+    return set(fsspec.available_protocols())
+
+
+@lru_cache(maxsize=1)
+def _available_protocols() -> set[str]:
+    # Cache available protocols to avoid repeated calls in multi-hop urlpaths
+    return set(fsspec.available_protocols())
