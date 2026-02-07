@@ -65,12 +65,17 @@ def _split_gen_kwargs(gen_kwargs: dict, max_num_jobs: int) -> list[dict]:
 
 
 def _merge_gen_kwargs(gen_kwargs_list: list[dict]) -> dict:
-    return {
-        key: [value for gen_kwargs in gen_kwargs_list for value in gen_kwargs[key]]
-        if isinstance(gen_kwargs_list[0][key], list)
-        else gen_kwargs_list[0][key]
-        for key in gen_kwargs_list[0]
-    }
+    result = {}
+    for key in gen_kwargs_list[0]:
+        value = gen_kwargs_list[0][key]
+        if isinstance(value, list):
+            merged = []
+            for gen_kwargs in gen_kwargs_list:
+                merged.extend(gen_kwargs[key])
+            result[key] = merged
+        else:
+            result[key] = value
+    return result
 
 
 def _shuffle_gen_kwargs(rng: np.random.Generator, gen_kwargs: dict) -> dict:
