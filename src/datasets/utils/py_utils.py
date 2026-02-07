@@ -14,6 +14,7 @@
 
 # Lint as: python3
 """Some python utils function and classes."""
+from __future__ import annotations
 
 import copy
 import functools
@@ -47,6 +48,8 @@ from ._dill import (  # noqa: F401 # imported for backward compatibility. TODO: 
     dumps,
     pklregister,
 )
+
+_TQDM_MRO_HAS_NOTEBOOK: bool = any("notebook" in cls.__name__ for cls in tqdm.__mro__)
 
 
 try:  # pragma: no branch
@@ -384,7 +387,8 @@ def _single_map_nested(args):
         batched
         and not isinstance(data_struct, dict)
         and isinstance(data_struct, types)
-        and all(not isinstance(v, (dict, types)) for v in data_struct)
+        # avoid generator/all overhead by iterating with early exit
+        and (lambda seq, t: (False if any(isinstance(v, (dict, t)) for v in seq) else True))(data_struct, types)
     ):
         return [mapped_item for batch in iter_batched(data_struct, batch_size) for mapped_item in function(batch)]
 
@@ -393,12 +397,29 @@ def _single_map_nested(args):
         logging.set_verbosity_warning()
     # Print at least one thing to fix tqdm in notebooks in multiprocessing
     # see https://github.com/tqdm/tqdm/issues/485#issuecomment-473338308
-    if rank is not None and not disable_tqdm and any("notebook" in tqdm_cls.__name__ for tqdm_cls in tqdm.__mro__):
+    if rank is not None and not disable_tqdm and _TQDM_MRO_HAS_NOTEBOOK:
         print(" ", end="", flush=True)
 
     # Loop over single examples or batches and write to buffer/file if examples are to be updated
     pbar_iterable = data_struct.items() if isinstance(data_struct, dict) else data_struct
     pbar_desc = (desc + " " if desc is not None else "") + "#" + str(rank) if rank is not None else desc
+
+    # If progress bars are disabled, avoid creating the tqdm object to reduce overhead
+    if disable_tqdm:
+        if isinstance(data_struct, dict):
+            return {
+                k: _single_map_nested((function, v, batched, batch_size, types, None, True, None)) for k, v in pbar_iterable
+            }
+        else:
+            mapped = [_single_map_nested((function, v, batched, batch_size, types, None, True, None)) for v in pbar_iterable]
+            if isinstance(data_struct, list):
+                return mapped
+            elif isinstance(data_struct, tuple):
+                return tuple(mapped)
+            else:
+                return np.array(mapped)
+
+    # Use tqdm only when needed
     with hf_tqdm(pbar_iterable, disable=disable_tqdm, position=rank, unit="obj", desc=pbar_desc) as pbar:
         if isinstance(data_struct, dict):
             return {
@@ -633,10 +654,12 @@ def iter_batched(iterable: Iterable[T], n: int) -> Iterable[list[T]]:
     if n < 1:
         raise ValueError(f"Invalid batch size {n}")
     batch = []
+    append = batch.append
     for item in iterable:
-        batch.append(item)
+        append(item)
         if len(batch) == n:
             yield batch
             batch = []
+            append = batch.append
     if batch:
         yield batch
