@@ -20,7 +20,7 @@ import math
 import os
 import re
 from dataclasses import dataclass
-from functools import partial
+from functools import lru_cache, partial
 from typing import TYPE_CHECKING, Optional, Union
 
 import pyarrow as pa
@@ -396,15 +396,12 @@ class _RelativeInstruction:
 
 def _str_to_read_instruction(spec):
     """Returns ReadInstruction for given string."""
-    res = _SUB_SPEC_RE.match(spec)
-    if not res:
-        raise ValueError(f"Unrecognized instruction format: {spec}")
-    unit = "%" if res.group("from_pct") or res.group("to_pct") else "abs"
+    split_name, rounding, from_s, to_s, unit = _parse_spec_cached(spec)
     return ReadInstruction(
-        split_name=res.group("split"),
-        rounding=res.group("rounding"),
-        from_=int(res.group("from")) if res.group("from") else None,
-        to=int(res.group("to")) if res.group("to") else None,
+        split_name=split_name,
+        rounding=rounding,
+        from_=int(from_s) if from_s else None,
+        to=int(to_s) if to_s else None,
         unit=unit,
     )
 
@@ -618,3 +615,34 @@ class ReadInstruction:
             list of _AbsoluteInstruction instances (corresponds to the + in spec).
         """
         return [_rel_to_abs_instr(rel_instr, name2len) for rel_instr in self._relative_instructions]
+
+
+
+@lru_cache(maxsize=2048)
+def _parse_spec_cached(spec: str):
+    """Parse a spec string and return a tuple of parsed components.
+
+    This helper caches the result of the regex matching and group extraction so
+    repeated parsing of the same spec string avoids re-running the regex.
+    """
+    res = _SUB_SPEC_RE.match(spec)
+    if not res:
+        raise ValueError(f"Unrecognized instruction format: {spec}")
+    unit = "%" if res.group("from_pct") or res.group("to_pct") else "abs"
+    # Return raw strings for numeric groups; conversion to int is done by caller
+    return (res.group("split"), res.group("rounding"), res.group("from"), res.group("to"), unit)
+
+
+@lru_cache(maxsize=2048)
+def _parse_spec_cached(spec: str):
+    """Parse a spec string and return a tuple of parsed components.
+
+    This helper caches the result of the regex matching and group extraction so
+    repeated parsing of the same spec string avoids re-running the regex.
+    """
+    res = _SUB_SPEC_RE.match(spec)
+    if not res:
+        raise ValueError(f"Unrecognized instruction format: {spec}")
+    unit = "%" if res.group("from_pct") or res.group("to_pct") else "abs"
+    # Return raw strings for numeric groups; conversion to int is done by caller
+    return (res.group("split"), res.group("rounding"), res.group("from"), res.group("to"), unit)
