@@ -322,9 +322,14 @@ def first_non_null_value(iterable):
 
 def first_non_null_non_empty_value(iterable):
     """Return the index and the value of the first non-null non-empty value in the iterable. If all values are None or empty, return -1 as index."""
+    empty_types = (dict, list)
     for i, value in enumerate(iterable):
-        if value is not None and not (isinstance(value, (dict, list)) and len(value) == 0):
-            return i, value
+        if value is None:
+            continue
+        # treat empty dicts and lists as empty; use truthiness to avoid len() call
+        if isinstance(value, empty_types) and not value:
+            continue
+        return i, value
     return -1, None
 
 
