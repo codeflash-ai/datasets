@@ -115,7 +115,10 @@ FILES_TO_IGNORE = [
 
 
 def contains_wildcards(pattern: str) -> bool:
-    return any(wildcard_character in pattern for wildcard_character in WILDCARD_CHARACTERS)
+    for wildcard_character in WILDCARD_CHARACTERS:
+        if wildcard_character in pattern:
+            return True
+    return False
 
 
 def sanitize_patterns(patterns: Union[dict, list, str]) -> dict[str, Union[list[str], "DataFilesList"]]:
