@@ -44,6 +44,8 @@ from ._filelock import FileLock
 from .extract import ExtractManager
 from .track import TrackedIterableFromGenerator
 
+_MAGIC_NUMBER_LOOKUP = []
+
 
 try:
     from aiohttp.client_exceptions import ClientError as _AiohttpClientError
@@ -532,13 +534,11 @@ def _get_extraction_protocol_with_magic_number(f) -> Optional[str]:
         return None
     magic_number = f.read(MAGIC_NUMBER_MAX_LENGTH)
     f.seek(0)
-    for i in range(MAGIC_NUMBER_MAX_LENGTH):
-        compression = MAGIC_NUMBER_TO_COMPRESSION_PROTOCOL.get(magic_number[: MAGIC_NUMBER_MAX_LENGTH - i])
-        if compression is not None:
-            return compression
-        compression = MAGIC_NUMBER_TO_UNSUPPORTED_COMPRESSION_PROTOCOL.get(magic_number[: MAGIC_NUMBER_MAX_LENGTH - i])
-        if compression is not None:
-            raise NotImplementedError(f"Compression protocol '{compression}' not implemented.")
+    for magic, protocol, unsupported in _MAGIC_NUMBER_LOOKUP:
+        if magic_number.startswith(magic):
+            if unsupported:
+                raise NotImplementedError(f"Compression protocol '{protocol}' not implemented.")
+            return protocol
 
 
 def _get_extraction_protocol(urlpath: str, download_config: Optional[DownloadConfig] = None) -> Optional[str]:
@@ -1418,3 +1418,9 @@ class FilesIterable(TrackedIterableFromGenerator):
     @classmethod
     def from_urlpaths(cls, urlpaths, download_config: Optional[DownloadConfig] = None) -> "FilesIterable":
         return cls(cls._iter_from_urlpaths, urlpaths, download_config)
+
+_MAGIC_NUMBER_LOOKUP.extend((magic, protocol, False) for magic, protocol in MAGIC_NUMBER_TO_COMPRESSION_PROTOCOL.items())
+
+_MAGIC_NUMBER_LOOKUP.extend((magic, protocol, True) for magic, protocol in MAGIC_NUMBER_TO_UNSUPPORTED_COMPRESSION_PROTOCOL.items())
+
+_MAGIC_NUMBER_LOOKUP.sort(key=lambda x: len(x[0]), reverse=True)
