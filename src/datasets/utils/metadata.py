@@ -124,13 +124,20 @@ class MetadataConfigs(dict[str, dict[str, Any]]):
         }
         if dataset_infos:
             # Preserve order of configs and splits
+            split_lookup = {
+                config_name: {
+                    data_file["split"]: data_file 
+                    for data_file in config_data["data_files"]
+                }
+                for config_name, config_data in metadata_configs.items()
+            }
+            
             metadata_configs = {
                 config_name: {
                     "data_files": [
-                        data_file
+                        split_lookup[config_name][split_name]
                         for split_name in dataset_info.splits
-                        for data_file in metadata_configs[config_name]["data_files"]
-                        if data_file["split"] == split_name
+                        if split_name in split_lookup[config_name]
                     ],
                     "version": metadata_configs[config_name]["version"],
                 }
