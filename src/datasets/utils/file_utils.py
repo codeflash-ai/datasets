@@ -903,30 +903,39 @@ def _prepare_single_hop_path_and_storage_options(
     token = None if download_config is None else download_config.token
     if urlpath.startswith(config.HF_ENDPOINT) and "/resolve/" in urlpath:
         urlpath = "hf://" + urlpath[len(config.HF_ENDPOINT) + 1 :].replace("/resolve/", "@", 1)
-    protocol = urlpath.split("://")[0] if "://" in urlpath else "file"
-    if download_config is not None and protocol in download_config.storage_options:
-        storage_options = download_config.storage_options[protocol].copy()
-    elif download_config is not None and protocol not in download_config.storage_options:
-        storage_options = {
-            option_name: option_value
-            for option_name, option_value in download_config.storage_options.items()
-            if option_name not in fsspec.available_protocols()
-        }
+    # faster protocol detection without creating a list from split when not needed
+    sep_index = urlpath.find("://")
+    protocol = urlpath[:sep_index] if sep_index != -1 else "file"
+
+    if download_config is not None:
+        scfg = download_config.storage_options
+        if protocol in scfg:
+            storage_options = scfg[protocol].copy()
+        else:
+            # call available_protocols once
+            available = fsspec.available_protocols()
+            storage_options = {
+                option_name: option_value
+                for option_name, option_value in scfg.items()
+                if option_name not in available
+            }
     else:
         storage_options = {}
     if protocol in {"http", "https"}:
         client_kwargs = storage_options.pop("client_kwargs", {})
         storage_options["client_kwargs"] = {"trust_env": True, **client_kwargs}  # Enable reading proxy env variables
         if "drive.google.com" in urlpath:
-            response = get_session().head(urlpath, timeout=10)
-            for k, v in response.cookies.items():
-                if k.startswith("download_warning"):
-                    urlpath += "&confirm=" + v
-                    cookies = response.cookies
-                    storage_options = {"cookies": cookies, **storage_options}
             # Fix Google Drive URL to avoid Virus scan warning
             if "confirm=" not in urlpath:
-                urlpath += "&confirm=t"
+                response = get_session().head(urlpath, timeout=10)
+                for k, v in response.cookies.items():
+                    if k.startswith("download_warning"):
+                        urlpath += "&confirm=" + v
+                        cookies = response.cookies
+                        storage_options = {"cookies": cookies, **storage_options}
+                # Fix Google Drive URL to avoid Virus scan warning
+                if "confirm=" not in urlpath:
+                    urlpath += "&confirm=t"
         if urlpath.startswith("https://raw.githubusercontent.com/"):
             # Workaround for served data with gzip content-encoding: https://github.com/fsspec/filesystem_spec/issues/389
             headers = storage_options.pop("headers", {})
