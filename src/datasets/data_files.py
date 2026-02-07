@@ -132,7 +132,8 @@ def sanitize_patterns(patterns: Union[dict, list, str]) -> dict[str, Union[list[
     elif isinstance(patterns, str):
         return {SANITIZED_DEFAULT_SPLIT: [patterns]}
     elif isinstance(patterns, list):
-        if any(isinstance(pattern, dict) for pattern in patterns):
+        if patterns and isinstance(patterns[0], dict):
+            result = {}
             for pattern in patterns:
                 if not (
                     isinstance(pattern, dict)
@@ -143,13 +144,11 @@ def sanitize_patterns(patterns: Union[dict, list, str]) -> dict[str, Union[list[
                     raise ValueError(
                         f"Expected each split to have a 'path' key which can be a string or a list of strings, but got {pattern}"
                     )
-            splits = [pattern["split"] for pattern in patterns]
-            if len(set(splits)) != len(splits):
-                raise ValueError(f"Some splits are duplicated in data_files: {splits}")
-            return {
-                str(pattern["split"]): pattern["path"] if isinstance(pattern["path"], list) else [pattern["path"]]
-                for pattern in patterns
-            }
+                split_name = str(pattern["split"])
+                if split_name in result:
+                    raise ValueError(f"Some splits are duplicated in data_files: {list(result.keys()) + [split_name]}")
+                result[split_name] = pattern["path"] if isinstance(pattern["path"], list) else [pattern["path"]]
+            return result
         else:
             return {SANITIZED_DEFAULT_SPLIT: patterns}
     else:
