@@ -567,21 +567,28 @@ class ReadInstruction:
     def to_spec(self):
         rel_instr_specs = []
         for rel_instr in self._relative_instructions:
-            rel_instr_spec = rel_instr.splitname
-            if rel_instr.from_ is not None or rel_instr.to is not None:
-                from_ = rel_instr.from_
-                to = rel_instr.to
+            from_ = rel_instr.from_
+            to = rel_instr.to
+            
+            if from_ is None and to is None:
+                rel_instr_specs.append(rel_instr.splitname)
+            else:
                 unit = rel_instr.unit
-                rounding = rel_instr.rounding
-                unit = unit if unit == "%" else ""
-                from_ = str(from_) + unit if from_ is not None else ""
-                to = str(to) + unit if to is not None else ""
-                slice_str = f"[{from_}:{to}]"
-                rounding_str = (
-                    f"({rounding})" if unit == "%" and rounding is not None and rounding != "closest" else ""
-                )
-                rel_instr_spec += slice_str + rounding_str
-            rel_instr_specs.append(rel_instr_spec)
+                is_percent = unit == "%"
+                unit_str = "%" if is_percent else ""
+                
+                from_str = f"{from_}{unit_str}" if from_ is not None else ""
+                to_str = f"{to}{unit_str}" if to is not None else ""
+                
+                if is_percent:
+                    rounding = rel_instr.rounding
+                    if rounding is not None and rounding != "closest":
+                        rel_instr_specs.append(f"{rel_instr.splitname}[{from_str}:{to_str}]({rounding})")
+                    else:
+                        rel_instr_specs.append(f"{rel_instr.splitname}[{from_str}:{to_str}]")
+                else:
+                    rel_instr_specs.append(f"{rel_instr.splitname}[{from_str}:{to_str}]")
+        
         return "+".join(rel_instr_specs)
 
     def __add__(self, other):
